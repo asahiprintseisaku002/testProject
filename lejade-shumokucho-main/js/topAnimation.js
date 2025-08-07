@@ -75,7 +75,7 @@ window.addEventListener('load', () => {
                                             });
                                         }
                                     });
-                                }, 600); // 600ms後に.phase5Imageを表示
+                                }, 800); // 600ms後に.phase5Imageを表示
                             }
                         });
 
