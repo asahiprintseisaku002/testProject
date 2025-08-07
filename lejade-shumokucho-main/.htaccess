@@ -1,0 +1,5 @@
+
+AuthUserFile "/home/will0905/will0905.xsrv.jp/htpasswd/lejade-shumokucho-main/.htpasswd"
+AuthName "Member Site"
+AuthType BASIC
+require valid-user

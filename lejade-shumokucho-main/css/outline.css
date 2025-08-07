@@ -1,0 +1,248 @@
+header.sub-page-header {
+    padding: 90px 0;
+    width: 100%;
+    text-align: center;
+    background-color: #937049;
+    background-image: url(../img/members-bg.jpg);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+header.sub-page-header h1 {
+    display: flex;
+    width: 10%;
+    min-width: 150px;
+    margin: auto;
+}
+
+main {
+    position: relative;
+}
+
+main:before {
+    content: "";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: 100%;
+    height: 100svh;
+    background-image: url(../img/outline/outline-bg.jpg);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    z-index: -1;
+}
+
+.main-wrraper {
+    max-width: 1200px;
+    width: 95%;
+    margin: auto;
+}
+
+.sub-page section {
+    margin: 40px auto;
+}
+
+h1.section-title {
+    text-align: center;
+    padding: 40px 0;
+    font-family: "RyuminPro";
+    font-size: 30px;
+    font-weight: bold;
+    color: #4D4D4D;
+}
+
+
+h2.section-title {
+    text-align: center;
+    padding: 40px 0;
+    font-family: "RyuminPro";
+    font-size: 20px;
+    font-weight: bold;
+    color: #4D4D4D;
+    background-color: #ddd;
+    padding: 20px 0px 20px 0px;
+    margin: 0 auto 0 auto;
+}
+
+.overview-table {
+    background-color: #ffffff;
+}
+
+.overview-table table {
+    width: 100%;
+    font-family: "RyuminPro";
+    font-weight: 300;
+    border-collapse: collapse
+}
+
+.overview-table table tr:not(:last-child) {
+    border-bottom: 1px solid #4D4D4D;
+}
+
+.overview-table table td {
+    padding: 20px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #4D4D4D;
+    letter-spacing: .05em;
+}
+
+td.t_title {
+    width: 16em;
+}
+
+.sub-page section.notice-ad {
+    margin: 50px auto;
+}
+
+.ad-content {
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    color: #4D4D4D;
+    font-family: "RyuminPro";
+}
+
+p.ad-title {
+    white-space: nowrap;
+    padding: 0 30px;
+    display: flex;
+    align-items: center;
+    border: solid 1px #4d4d4d;
+    font-size: 16px;
+}
+
+p.ad-text {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+section.update-overview {
+    margin-bottom: 120px;
+}
+
+section.update-overview .overview-table {
+    padding: 10px 40px;
+}
+
+.sub-page section.members-btn-section {
+    margin: 0;
+}
+
+.members-btn-container {
+    padding: 60px 0;
+}
+
+p.members-btn-detail {
+    letter-spacing: 0;
+    font-size: max(0.9vw, 12px);
+}
+
+.return-home {
+    width: 95%;
+    max-width: 780px;
+    margin: 0 auto 60px;
+}
+
+.return-home a {
+    display: block;
+    background-color: #6CA5C0;
+    width: fit-content;
+    min-width: 5em;
+    padding: 20px 60px;
+    font-size: 20px;
+    color: #fff;
+    text-align: center;
+    margin: auto;
+    font-family: "RyuminPro";
+    transition: all .2s;
+}
+
+@media (hover: hover) {
+    .return-home a:hover {
+        opacity: .7;
+    }
+}
+
+@media (max-width: 768px) {
+
+    header.sub-page-header {
+        padding: 60px 0;
+    }
+
+    .sub-page section {
+        margin: 20px auto;
+    }
+
+    h2.section-title {
+        padding: 30px 0;
+    }
+
+    .overview-table {
+        padding: 10px 20px;
+    }
+
+    .overview-table table td {
+        display: block;
+        width: 100%;
+    }
+
+    .overview-table table td.t_title {
+        padding-bottom: 5px;
+    }
+
+    .overview-table table td.t_text {
+        padding-top: 5px;
+    }
+
+    .members-btn-container {
+        padding: 40px 2.5%;
+    }
+
+    .ad-content {
+        display: flex;
+        flex-direction: column;
+        width: 90%;
+        margin: auto;
+    }
+
+    p.ad-title {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    section.update-overview {
+        margin-bottom: 80px;
+    }
+
+    section.update-overview .overview-table {
+        padding: 0px 20px;
+    }
+
+    .return-home {
+        margin: 0 auto 40px;
+    }
+
+    .return-home a {
+        font-size: 16px;
+        padding: 16px 0;
+        width: 20%;
+        min-width: 150px;
+    }
+
+}
+
+/* 増田追加css */
+section.update-overview .overview-table {
+    padding: 0;
+}
+
+@media (max-width: 768px) {
+    section.update-overview .overview-table {
+        padding: 0px 20px;
+    }
+}
