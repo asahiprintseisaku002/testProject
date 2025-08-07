@@ -57,24 +57,28 @@ window.addEventListener('load', () => {
 
                         // .phase3のfadeOut完了後
                         $(".shumoku-container-wrap").removeClass('fadeIn');
-                        void $(".shumoku-container-wrap")[0].offsetHeight;
+                        void $(".shumoku-container-wrap")[0].offsetHeight; // 強制リフロー
                         $(".shumoku-container-wrap").one('transitionend', function (e) {
-                            if (e.originalEvent.propertyName === 'opacity') {
+                            const prop = e.originalEvent ? e.originalEvent.propertyName : e.propertyName;
+                            if (prop === 'opacity') {
                                 // .topImperialをfadeIn
                                 $(".topImperial").addClass('fadeIn');
                                 setTimeout(() => {
                                     $(".phase5Image").addClass('fadeIn').one('transitionend', function (ev2) {
-                                        if (ev2.originalEvent.propertyName === 'opacity') {
+                                        const prop2 = ev2.originalEvent ? ev2.originalEvent.propertyName : ev2.propertyName;
+                                        if (prop2 === 'opacity') {
                                             $(this).addClass('panUp').one('transitionend', function (ev3) {
-                                                if (ev3.originalEvent.propertyName === 'transform') {
+                                                const prop3 = ev3.originalEvent ? ev3.originalEvent.propertyName : ev3.propertyName;
+                                                if (prop3 === 'transform') {
                                                     safeResolve();
                                                 }
                                             });
                                         }
                                     });
-                                }, 600); 
+                                }, 600); // 600ms後に.phase5Imageを表示
                             }
                         });
+
 
                         // フェールセーフ（10秒経過で必ずresolve）
                         setTimeout(safeResolve, 10000);
