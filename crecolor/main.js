@@ -12,19 +12,22 @@ const PALETTE = [
 ];
 
 const PARAMS = {
-  diffusion: 0.72,      // 拡散量（0〜1）
-  decay:    0.006,      // 減衰量（毎フレーム）
-  injectStrength: 0.1,  // 注入強度（濃さ）
+  diffusion: 0.90,      // 拡散量（0〜1）
+  decay:    0.008,      // 減衰量（毎フレーム）
+  injectStrength: 0.3,  // 注入強度（濃さ）
   brushRadius:   0.035, // にじみの初期半径（画面比）
   stationaryMs:  80,   // “止まった”と判定する静止時間[ms]
-  moveEpsilon:   2.0,   // “動いた”とみなすピクセル閾値
+  moveEpsilon:   3.0,   // “動いた”とみなすピクセル閾値
   resolutionScale: 0.5,  // 0.5 にすると低解像度で軽くなる
   stationaryMs: 280,
   moveEpsilon:  2.0,
   holdGrowRadiusPerSec:   0.020, // 半径の増分/秒
   holdGrowStrengthPerSec: 0.50,  // 濃さの増分/秒
   holdMaxRadiusScale:     2.2,   // 半径は最大で base*2.2 まで
-  holdMaxStrengthScale:   2.5    // 濃さは最大で base*2.5 まで
+  holdMaxStrengthScale:   2.5,    // 濃さは最大で base*2.5 まで
+  followDelayMs: 200,   // 注入開始から何ms待って追従を始めるか（“後に動く”感）
+  followTau:     0.35,  // 追従の時定数（秒）小さい=素早く追う, 大きい=ゆっくり
+  followWhenDown: false // 押下中にも追うなら true。離した後だけなら false
 };
 
 // ====== 基本セットアップ ======
@@ -32,7 +35,7 @@ const canvas   = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference:'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 // 背景クリア色（透明黒）。不透明にしたいなら第2引数を1に。
-renderer.setClearColor(0xffffff, 0);
+renderer.setClearColor(0xffffff, 1);
 
 resize();
 
@@ -109,6 +112,39 @@ const simMat = new THREE.ShaderMaterial({
     flowScale: { value: 2.6 },
     injectAxes:  { value: new THREE.Vector2(1.0, 1.0) }, // 1,1 で丸
     injectAngle: { value: 0.0 },                         // 0 = 無回転
+    microAmp:   { value: 0.35 }, // ゆらぎ強さ（0.15〜0.6 推奨）
+    microScale: { value: 3.1 },  // 空間スケール（非整数）
+    microSpeed: { value: 0.23 }, // 時間変化
+    diffusionJitterAmp:  { value: 0.3 }, // 拡散の揺らぎ強さ（±）
+    diffusionJitterScale:{ value: 3.4  },
+    diffusionJitterSpeed:{ value: 0.22 },
+    kernelJitterAmp:   { value: 0.6 }, // サンプル位置の微小ジッタ（ピクセル単位で < 0.6 推奨）
+    kernelJitterSpeed: { value: 1.3 },
+    waterAmp:   { value: 0.5 }, // 外側の動きの強さ（0.15〜0.6）
+    waterScale: { value: 2.85  }, // 空間スケール（非整数がオススメ）
+    waterSpeed: { value: 0.22 }, // 時間変化
+
+    // マスク用（どの円の外側か）
+    ringInner:  { value: PARAMS.brushRadius }, // 内側＝静かにする半径
+    ringWidth:  { value: PARAMS.brushRadius * 0.8 }, // 内→外の遷移幅
+    centerPos:  { value: new THREE.Vector2(0.5, 0.5) }, // 円の中心（UV）
+    // simMat の uniforms に追加（お好みで調整）
+    shapeNoiseScale: { value: 2.0 },   // 乱れの空間スケール（非整数推奨）
+    shapeNoiseSpeed: { value: 0.35 },  // 乱れの時間変化
+    shapeAniso:      { value: 2.5 },   // 楕円の伸び率（1=等方, 2前後で程よい歪み）
+    shapeMix:        { value: 0.001 },   // 等方:1.0 ←→ 楕円:0.0 のブレンド係数
+    // 形状ノイズ（回転楕円ぼかし）
+    shapeNoiseScale: { value: 3.2 }, // 非整数推奨
+    shapeNoiseSpeed: { value: 0.25 },
+    shapeAniso:      { value: 1.9 }, // 1=等方、>1で楕円
+    shapeMix:        { value: 0.65 },// 0=楕円のみ, 1=等方のみ
+
+    // 縁ギザギザ（エッジ方向オフセット）
+    jagAmp:     { value: 0.6 },  // 強さ（0.6〜1.8）
+    jagFreq:    { value: 6.0 },  // 周波数（6〜14）
+    jagOctaves: { value: 3.0 },  // Fbmオクターブ数（2〜4）
+    jagSpeed:   { value: 0.35 }, // 時間変化
+    jagEdge:    { value: 8.0 },  // エッジ選択の鋭さ（大きいほど縁限定）
   },
   blending: THREE.NoBlending,
   depthTest: false,
@@ -135,11 +171,23 @@ const composeMat = new THREE.ShaderMaterial({
     colors2:  { value: paletteVec3[2] ?? new THREE.Vector3(0,0,0) },
     colors3:  { value: paletteVec3[3] ?? new THREE.Vector3(0,0,0) },
     exposure: { value: 1.0 },
-    gamma:    { value: 2.2 }
+    gamma:    { value: 2.2 },
+    bgColor:    { value: new THREE.Color(0xffffff) }, // 背景紙の色（白）
+    inkDensity: { value: 1.3 }, 
+    
   },
   depthTest: false,
   depthWrite:false
 });
+const paper = new THREE.Color(0xffffff);
+const toVec3 = (c) => new THREE.Vector3(c.r, c.g, c.b);
+composeMat.uniforms.colors0.value = paletteVec3[0] ?? toVec3(paper);
+composeMat.uniforms.colors1.value = paletteVec3[1] ?? toVec3(paper);
+composeMat.uniforms.colors2.value = paletteVec3[2] ?? toVec3(paper);
+composeMat.uniforms.colors3.value = paletteVec3[3] ?? toVec3(paper);
+composeMat.uniforms.exposure.value = 1.0;
+composeMat.uniforms.gamma.value    = 2.2;
+
 const composeMesh  = new THREE.Mesh(quadGeo, composeMat);
 scene.add(composeMesh);
 
@@ -190,6 +238,11 @@ function handleMove(evt) {
     if (!injecting && (t - lastMoveTime) > PARAMS.stationaryMs) {
       pickNextColor();
       injecting = true;
+      // ★ その時点のマウス位置を「円の中心」として固定
+      simMat.uniforms.centerPos.value.copy(mouseNDC);
+
+      // （必要なら）円サイズも更新
+      simMat.uniforms.ringInner.value = simMat.uniforms.injectRadius.value;
     }
   }
 }
@@ -219,6 +272,8 @@ window.addEventListener('resize', () => {
 
 // 既存の mousemove/mouseenter/mouseleave は残してOKですが、
 // モバイル主眼なら pointer 系でまとまるのでこちら推奨
+let centerTarget = new THREE.Vector2(0.5, 0.5);
+let injectionStartTime = 0;
 
 function updateFromClientXY(clientX, clientY) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -242,6 +297,17 @@ function updateFromClientXY(clientX, clientY) {
       pickNextColor();
       injecting = true;
       // 静止で注入を始めるタイミングで hold をリセットしない（押下時間で成長）
+      // 円の“初期中心”をその場に固定（にじみはここから始まる）
+      simMat.uniforms.centerPos.value.copy(mouseNDC);
+
+      // 後追いで向かうターゲットは常に最新マウス
+      centerTarget.copy(mouseNDC);
+
+      // 遅延の基準時刻
+      injectionStartTime = t;
+
+      // 内側半径も合わせたい場合
+      simMat.uniforms.ringInner.value = simMat.uniforms.injectRadius.value;
     }
   }
 }
@@ -264,7 +330,9 @@ function onPointerDown(e){
 function onPointerMove(e){
   if (pointerId !== e.pointerId) return;
   updateFromClientXY(e.clientX, e.clientY);
+  centerTarget.copy(mouseNDC); // ← 円の“行き先”だけ更新（実際に動かすのは後述のフレームで）
 }
+
 
 function onPointerUp(e){
   if (pointerId !== e.pointerId) return;
@@ -310,6 +378,61 @@ const colorToVec4 = (index) => {
   return new THREE.Vector4(v[0], v[1], v[2], v[3]);
 };
 
+let prevTime = performance.now() * 0.001;
+
+function frame() {
+  const nowMs = performance.now();
+  const now   = nowMs * 0.001;
+  const dt    = Math.max(0.0, now - prevTime);
+  prevTime = now;
+
+  // 追従開始の条件：遅延時間を過ぎた／押下中に追うかどうか
+  const passedDelay = (nowMs - injectionStartTime) >= PARAMS.followDelayMs;
+  const canFollow   = passedDelay && (PARAMS.followWhenDown || !isPointerDown);
+
+  if (canFollow) {
+    // 時定数 followTau の指数補間。alpha = 1 - exp(-dt/tau)
+    const tau  = Math.max(1e-3, PARAMS.followTau);
+    const alpha = 1.0 - Math.exp(-dt / tau);
+
+    // centerPos をターゲットへ少しだけ近づける
+    const cp = simMat.uniforms.centerPos.value;
+    cp.lerp(centerTarget, alpha);
+  }
+
+  // 既存の time 更新など
+  simMat.uniforms.time.value = now;
+
+  // 既存の注入/描画フロー…
+  // renderer.setRenderTarget(rtB); renderer.render(...); など
+    // 押下時間に比例して成長（クランプあり）
+  const radiusScale   = Math.min(1 + PARAMS.holdGrowRadiusPerSec   * holdElapsedSec,   PARAMS.holdMaxRadiusScale);
+  const strengthScale = Math.min(1 + PARAMS.holdGrowStrengthPerSec * holdElapsedSec,   PARAMS.holdMaxStrengthScale);
+
+  // シェーダへ反映
+  simMat.uniforms.injectRadius.value   = baseRadius   * radiusScale;
+  simMat.uniforms.injectStrength.value = baseStrength * strengthScale;
+
+  // 既存：注入フラグやマウス座標など
+  simMat.uniforms.prevTex.value = rtA.texture;
+  simMat.uniforms.injecting.value = injecting ? 1.0 : 0.0;
+  simMat.uniforms.mouse.value.copy(mouseNDC);
+  simMat.uniforms.injectColor.value = colorToVec4(currentColorIndex);
+
+  // --- シミュレーション＆描画 ---
+  renderer.setRenderTarget(rtB);
+  renderer.render(simScene, camera);
+  renderer.setRenderTarget(null);
+
+  [rtA, rtB] = [rtB, rtA];
+
+  composeMat.uniforms.fieldTex.value = rtA.texture;
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+
+/*
 function frame() {
   const now = performance.now();
   if (isPointerDown) {
@@ -344,7 +467,7 @@ function frame() {
 
   requestAnimationFrame(frame);
 }
-
+*/
 requestAnimationFrame(frame);
 
 renderer.debug.checkShaderErrors = true;
