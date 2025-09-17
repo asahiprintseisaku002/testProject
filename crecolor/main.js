@@ -77,12 +77,21 @@ function allocRTs() {
   rtA = makeRT(simW, simH);
   rtB = makeRT(simW, simH);
 
-  // 初期クリア
+  // 画面のクリア色（白）を退避
+  const savedColor = new THREE.Color();
+  renderer.getClearColor(savedColor);
+  const savedAlpha = renderer.getClearAlpha();
+
+  // ★ シミュレーション用RTは「黒=インク無し」で初期化
+  renderer.setClearColor(0x000000, 0.0);
   renderer.setRenderTarget(rtA);
   renderer.clear(true, true, true);
   renderer.setRenderTarget(rtB);
   renderer.clear(true, true, true);
   renderer.setRenderTarget(null);
+
+  // 画面のクリア色（白）に戻す
+  renderer.setClearColor(savedColor, savedAlpha);
 }
 allocRTs();
 
