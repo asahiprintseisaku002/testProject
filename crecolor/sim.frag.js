@@ -68,8 +68,19 @@ vec4 blurAniso(sampler2D tex, vec2 uv, vec2 texel){
   float ang = vnoise(uv * shapeNoiseScale, time * shapeNoiseSpeed) * 6.2831853;
   float c = cos(ang), s = sin(ang);
   mat2 R = mat2(c, -s, s, c);
-  mat2 S = mat2(1.0/shapeAniso, 0.0, 0.0, shapeAniso);
+
+  // 局所ノイズで楕円度を変動
+  float nA   = abs(vnoise(uv * (shapeNoiseScale*0.9), time*shapeNoiseSpeed*1.17));
+  float aLoc = mix(1.0, shapeAniso, nA);
+  mat2 S = mat2(1.0/aLoc, 0.0,
+                0.0,      aLoc);
   mat2 M = R * S;
+
+  // ★ ここで “m” を作り直す（uniform は関数内からも見える）
+  float aspect = texel.y / texel.x;
+  vec2  d      = vec2((uv.x - centerPos.x)*aspect, uv.y - centerPos.y);
+  float r      = length(d);
+  float mLocal = smoothstep(ringInner, ringInner + ringWidth, r); // 0→1（外側）
 
   vec2 offs[9];
   offs[0]=vec2(-1.0,-1.0); offs[1]=vec2(0.0,-1.0); offs[2]=vec2(1.0,-1.0);
@@ -90,8 +101,12 @@ vec4 blurAniso(sampler2D tex, vec2 uv, vec2 texel){
   }
   vec4 gIso = sumIso / ws;
   vec4 gAn  = sumAn  / ws;
-  return mix(gAn, gIso, clamp(shapeMix, 0.0, 1.0));
+
+  // 縁(m=1)ほど等方→楕円に寄せる（shapeMix を 0.2 まで下げる）
+  float edgeMix = clamp(mix(shapeMix, 0.2, mLocal), 0.0, 1.0);
+  return mix(gAn, gIso, edgeMix);
 }
+
 
 // 勾配から縁法線
 vec2 edgeNormal(sampler2D tex, vec2 uv, vec2 texel){

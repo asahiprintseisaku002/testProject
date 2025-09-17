@@ -5,10 +5,10 @@ import { composeFrag } from './compose.frag.js';
 
 // ====== 設定（後からいくらでも調整OK） ======
 const PALETTE = [
-  0xff5a5a, // 赤系
-  0x5ab8ff, // 青系
-  0xffd35a, // 黄系
-  0x8cff9a  // 緑系
+  0xe8380d, // 赤系
+  0x024299, // 青系
+  0xffda08, // 黄系
+  0x039a46  // 緑系
 ];
 
 const PARAMS = {
@@ -129,9 +129,9 @@ const simMat = new THREE.ShaderMaterial({
     ringWidth:  { value: PARAMS.brushRadius * 0.8 }, // 内→外の遷移幅
     centerPos:  { value: new THREE.Vector2(0.5, 0.5) }, // 円の中心（UV）
     // simMat の uniforms に追加（お好みで調整）
-    shapeNoiseScale: { value: 2.0 },   // 乱れの空間スケール（非整数推奨）
+    shapeNoiseScale: { value: 1.8 },   // 乱れの空間スケール（非整数推奨）
     shapeNoiseSpeed: { value: 0.35 },  // 乱れの時間変化
-    shapeAniso:      { value: 2.5 },   // 楕円の伸び率（1=等方, 2前後で程よい歪み）
+    shapeAniso:      { value: 2.2 },   // 楕円の伸び率（1=等方, 2前後で程よい歪み）
     shapeMix:        { value: 0.001 },   // 等方:1.0 ←→ 楕円:0.0 のブレンド係数
     // 形状ノイズ（回転楕円ぼかし）
     shapeNoiseScale: { value: 3.2 }, // 非整数推奨
