@@ -17,17 +17,21 @@ const PARAMS = {
   injectStrength: 0.3,  // 注入強度（濃さ）
   brushRadius:   0.035, // にじみの初期半径（画面比）
   stationaryMs:  80,   // “止まった”と判定する静止時間[ms]
-  moveEpsilon:   3.0,   // “動いた”とみなすピクセル閾値
+  moveEpsilon:   10.0,   // “動いた”とみなすピクセル閾値
   resolutionScale: 0.5,  // 0.5 にすると低解像度で軽くなる
-  stationaryMs: 280,
-  moveEpsilon:  2.0,
+
   holdGrowRadiusPerSec:   0.020, // 半径の増分/秒
   holdGrowStrengthPerSec: 0.50,  // 濃さの増分/秒
   holdMaxRadiusScale:     2.2,   // 半径は最大で base*2.2 まで
   holdMaxStrengthScale:   2.5,    // 濃さは最大で base*2.5 まで
   followDelayMs: 200,   // 注入開始から何ms待って追従を始めるか（“後に動く”感）
   followTau:     0.35,  // 追従の時定数（秒）小さい=素早く追う, 大きい=ゆっくり
-  followWhenDown: false // 押下中にも追うなら true。離した後だけなら false
+  followWhenDown: false, // 押下中にも追うなら true。離した後だけなら false
+
+    // ★ 追加：動作に応じた減衰
+  decayWhileMove: 0.003,  // 動いている間の減衰（ゆっくり消える）
+  decayWhileStop: 0.015,  // 止まった後の減衰（早く消える）
+  decayEaseTau:   0.25,   // 減衰の切替を滑らかにする時定数[秒]
 };
 
 // ====== 基本セットアップ ======
@@ -208,6 +212,47 @@ let holdElapsedSec = 0;   // 押下継続時間（秒）
 const baseRadius   = PARAMS.brushRadius;
 const baseStrength = PARAMS.injectStrength;
 
+// --- 追加：状態フラグと開始関数 ---
+let isOver = false;
+
+function startInjection() {
+  // その場からにじみを始める
+  pickNextColor();
+  injecting = true;
+  // 中心と内側半径を記録（“外側ゆらぎ”やマスクに使用している場合）
+  simMat.uniforms.centerPos.value.copy(mouseNDC);
+  simMat.uniforms.ringInner.value = simMat.uniforms.injectRadius.value;
+}
+
+// --- 置き換え：イベント ---
+function handleMove(evt) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const uv = screenToUV(evt);
+  mouseNDC.set(uv.x, uv.y);
+
+  // マウスが乗っていて、まだ注入していなければ即開始
+  if (isOver && !injecting) {
+    startInjection();
+  }
+}
+
+function handleEnter(evt) {
+  isOver = true;
+  handleMove(evt);   // 位置を先に更新
+  startInjection();  // 乗った瞬間に注入開始
+}
+
+function handleLeave() {
+  isOver = false;
+  injecting = false;     // 画面外で停止
+  mouseNDC.set(-10, -10);
+}
+
+// 既存のリスナー登録はそのまま/またはこれに準拠
+renderer.domElement.addEventListener('mousemove',  handleMove);
+renderer.domElement.addEventListener('mouseenter', handleEnter);
+renderer.domElement.addEventListener('mouseleave', handleLeave);
+
 
 function pickNextColor() {
   currentColorIndex = (currentColorIndex + 1) % PALETTE.length;
@@ -219,47 +264,6 @@ function screenToUV(evt) {
   const y = (evt.clientY - rect.top)  / rect.height;
   return new THREE.Vector2(x, 1 - y); // UV は下原点
 }
-
-function handleMove(evt) {
-  const rect = renderer.domElement.getBoundingClientRect();
-  const px = new THREE.Vector2(evt.clientX - rect.left, evt.clientY - rect.top);
-  const dist = px.distanceTo(lastPx);
-  lastPx.copy(px);
-
-  const uv = screenToUV(evt);
-  mouseNDC.set(uv.x, uv.y);
-
-  const t = performance.now();
-  if (dist > PARAMS.moveEpsilon) {
-    lastMoveTime = t;     // 動いた
-    injecting = false;    // 直ちに注入は止める
-  } else {
-    // 一定時間止まっていたら注入開始（開始のタイミングで色を切替）
-    if (!injecting && (t - lastMoveTime) > PARAMS.stationaryMs) {
-      pickNextColor();
-      injecting = true;
-      // ★ その時点のマウス位置を「円の中心」として固定
-      simMat.uniforms.centerPos.value.copy(mouseNDC);
-
-      // （必要なら）円サイズも更新
-      simMat.uniforms.ringInner.value = simMat.uniforms.injectRadius.value;
-    }
-  }
-}
-
-function handleEnter(evt) {
-  lastMoveTime = performance.now();
-  injecting = false;
-  handleMove(evt);
-}
-function handleLeave() {
-  injecting = false;
-  mouseNDC.set(-10, -10); // 画面外に
-}
-
-renderer.domElement.addEventListener('mousemove', handleMove);
-renderer.domElement.addEventListener('mouseenter', handleEnter);
-renderer.domElement.addEventListener('mouseleave', handleLeave);
 
 window.addEventListener('resize', () => {
   resize();
@@ -386,6 +390,29 @@ function frame() {
   const dt    = Math.max(0.0, now - prevTime);
   prevTime = now;
 
+  // ---- 停止判定 ----
+  const stopped = isOver
+    ? (nowMs - lastMoveTime) > PARAMS.stationaryMs
+    : true; // 画面外なら「停止扱い」
+
+    // ★ 停止していたら、クリック時と同様に注入を止める
+    //if (stopped && injecting) {
+    //  injecting = false;
+    //}
+
+  // ---- 目標 decay を決める ----
+  const targetDecay = stopped ? PARAMS.decayWhileStop : PARAMS.decayWhileMove;
+
+  // ---- 現在の decay を滑らかに目標へ（指数補間）----
+  const tau = Math.max(1e-3, PARAMS.decayEaseTau);
+  const alpha = 1.0 - Math.exp(-dt / tau);
+  simMat.uniforms.decay.value =
+    THREE.MathUtils.lerp(simMat.uniforms.decay.value, targetDecay, alpha);
+
+  // （任意）停止中は“注入”を止めるなら：
+  simMat.uniforms.injecting.value = (isOver && !stopped) ? 1.0 : 0.0;
+  // ずっと注入し続けたいなら、既存ロジックのままでOK
+
   // 追従開始の条件：遅延時間を過ぎた／押下中に追うかどうか
   const passedDelay = (nowMs - injectionStartTime) >= PARAMS.followDelayMs;
   const canFollow   = passedDelay && (PARAMS.followWhenDown || !isPointerDown);
@@ -430,44 +457,6 @@ function frame() {
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
-
-
-/*
-function frame() {
-  const now = performance.now();
-  if (isPointerDown) {
-    holdElapsedSec = (now - holdStartTime) * 0.001;
-  } else {
-    holdElapsedSec = 0;
-  }
-
-  // 押下時間に比例して成長（クランプあり）
-  const radiusScale   = Math.min(1 + PARAMS.holdGrowRadiusPerSec   * holdElapsedSec,   PARAMS.holdMaxRadiusScale);
-  const strengthScale = Math.min(1 + PARAMS.holdGrowStrengthPerSec * holdElapsedSec,   PARAMS.holdMaxStrengthScale);
-
-  // シェーダへ反映
-  simMat.uniforms.injectRadius.value   = baseRadius   * radiusScale;
-  simMat.uniforms.injectStrength.value = baseStrength * strengthScale;
-
-  // 既存：注入フラグやマウス座標など
-  simMat.uniforms.prevTex.value = rtA.texture;
-  simMat.uniforms.injecting.value = injecting ? 1.0 : 0.0;
-  simMat.uniforms.mouse.value.copy(mouseNDC);
-  simMat.uniforms.injectColor.value = colorToVec4(currentColorIndex);
-
-  // --- シミュレーション＆描画 ---
-  renderer.setRenderTarget(rtB);
-  renderer.render(simScene, camera);
-  renderer.setRenderTarget(null);
-
-  [rtA, rtB] = [rtB, rtA];
-
-  composeMat.uniforms.fieldTex.value = rtA.texture;
-  renderer.render(scene, camera);
-
-  requestAnimationFrame(frame);
-}
-*/
 requestAnimationFrame(frame);
 
 renderer.debug.checkShaderErrors = true;
