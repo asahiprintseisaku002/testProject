@@ -76,9 +76,6 @@ function allocRTs() {
 
   rtA = makeRT(simW, simH);
   rtB = makeRT(simW, simH);
-  // ★ 追加：にじみが端で止まらず循環するようにする
-  //rtA.texture.wrapS = rtA.texture.wrapT = THREE.RepeatWrapping;
-  //rtB.texture.wrapS = rtB.texture.wrapT = THREE.RepeatWrapping;
 
   // 初期クリア
   renderer.setRenderTarget(rtA);
@@ -212,10 +209,34 @@ let holdElapsedSec = 0;   // 押下継続時間（秒）
 const baseRadius   = PARAMS.brushRadius;
 const baseStrength = PARAMS.injectStrength;
 
+// --- UIトグル：注入の有効/無効 ---
+let uiInjectionEnabled = true;
+
+const injectBtn = document.getElementById('injectToggle');
+function updateInjectBtn(){
+  if (!injectBtn) return;
+  injectBtn.textContent = uiInjectionEnabled ? 'Inject: ON' : 'Inject: OFF';
+  injectBtn.setAttribute('aria-pressed', uiInjectionEnabled ? 'true' : 'false');
+  injectBtn.classList.toggle('off', !uiInjectionEnabled);
+}
+if (injectBtn){
+  injectBtn.addEventListener('click', () => {
+    uiInjectionEnabled = !uiInjectionEnabled;
+    if (!uiInjectionEnabled) {
+      // UIでOFFにした瞬間に注入停止
+      injecting = false;
+    }
+    updateInjectBtn();
+  });
+  updateInjectBtn();
+}
+
+
 // --- 追加：状態フラグと開始関数 ---
 let isOver = false;
 
 function startInjection() {
+  if (!uiInjectionEnabled) return; 
   // その場からにじみを始める
   pickNextColor();
   injecting = true;
@@ -395,11 +416,6 @@ function frame() {
     ? (nowMs - lastMoveTime) > PARAMS.stationaryMs
     : true; // 画面外なら「停止扱い」
 
-    // ★ 停止していたら、クリック時と同様に注入を止める
-    //if (stopped && injecting) {
-    //  injecting = false;
-    //}
-
   // ---- 目標 decay を決める ----
   const targetDecay = stopped ? PARAMS.decayWhileStop : PARAMS.decayWhileMove;
 
@@ -408,10 +424,6 @@ function frame() {
   const alpha = 1.0 - Math.exp(-dt / tau);
   simMat.uniforms.decay.value =
     THREE.MathUtils.lerp(simMat.uniforms.decay.value, targetDecay, alpha);
-
-  // （任意）停止中は“注入”を止めるなら：
-  simMat.uniforms.injecting.value = (isOver && !stopped) ? 1.0 : 0.0;
-  // ずっと注入し続けたいなら、既存ロジックのままでOK
 
   // 追従開始の条件：遅延時間を過ぎた／押下中に追うかどうか
   const passedDelay = (nowMs - injectionStartTime) >= PARAMS.followDelayMs;
@@ -442,7 +454,10 @@ function frame() {
 
   // 既存：注入フラグやマウス座標など
   simMat.uniforms.prevTex.value = rtA.texture;
-  simMat.uniforms.injecting.value = injecting ? 1.0 : 0.0;
+
+  const injectingNow = injecting && uiInjectionEnabled;
+  simMat.uniforms.injecting.value = injectingNow ? 1.0 : 0.0;
+  //simMat.uniforms.injecting.value = injecting ? 1.0 : 0.0;
   simMat.uniforms.mouse.value.copy(mouseNDC);
   simMat.uniforms.injectColor.value = colorToVec4(currentColorIndex);
 
