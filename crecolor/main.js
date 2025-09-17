@@ -224,7 +224,7 @@ let uiInjectionEnabled = true;
 const injectBtn = document.getElementById('injectToggle');
 function updateInjectBtn(){
   if (!injectBtn) return;
-  injectBtn.textContent = uiInjectionEnabled ? 'Inject: ON' : 'Inject: OFF';
+  injectBtn.textContent = uiInjectionEnabled ? 'color : ON' : 'color : OFF';
   injectBtn.setAttribute('aria-pressed', uiInjectionEnabled ? 'true' : 'false');
   injectBtn.classList.toggle('off', !uiInjectionEnabled);
 }
