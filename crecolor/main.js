@@ -41,6 +41,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 // 背景クリア色（透明黒）。不透明にしたいなら第2引数を1に。
 renderer.setClearColor(0xffffff, 1);
 
+renderer.domElement.style.touchAction = 'none';
+
 resize();
 
 const scene   = new THREE.Scene();
@@ -279,10 +281,15 @@ function handleLeave() {
 }
 
 // 既存のリスナー登録はそのまま/またはこれに準拠
-renderer.domElement.addEventListener('mousemove',  handleMove);
-renderer.domElement.addEventListener('mouseenter', handleEnter);
-renderer.domElement.addEventListener('mouseleave', handleLeave);
-
+//renderer.domElement.addEventListener('mousemove',  handleMove);
+//renderer.domElement.addEventListener('mouseenter', handleEnter);
+//renderer.domElement.addEventListener('mouseleave', handleLeave);
+const HAS_HOVER = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+if (HAS_HOVER) {
+  renderer.domElement.addEventListener('mousemove',  handleMove);
+  renderer.domElement.addEventListener('mouseenter', handleEnter);
+  renderer.domElement.addEventListener('mouseleave', handleLeave);
+}
 
 function pickNextColor() {
   currentColorIndex = (currentColorIndex + 1) % PALETTE.length;
@@ -353,6 +360,32 @@ function onPointerDown(e){
   lastMoveTime = performance.now();
   holdStartTime = performance.now();
   holdElapsedSec = 0;
+
+  updateFromClientXY(e.clientX, e.clientY);
+
+  // ← ここがポイント：押した瞬間から注入開始（UIがONのとき）
+  if (uiInjectionEnabled) {
+    pickNextColor();
+    injecting = true;
+    simMat.uniforms.centerPos.value.copy(mouseNDC);
+    simMat.uniforms.ringInner.value = simMat.uniforms.injectRadius.value;
+    centerTarget.copy(mouseNDC);
+    injectionStartTime = performance.now(); // 追従の遅延用
+  }
+
+  if (renderer.domElement.setPointerCapture) {
+    renderer.domElement.setPointerCapture(pointerId);
+  }
+}
+
+/*
+function onPointerDown(e){
+  if (pointerId !== null) return;       // マルチタッチ無視（最初の指のみ）
+  pointerId = e.pointerId;
+  isPointerDown = true;
+  lastMoveTime = performance.now();
+  holdStartTime = performance.now();
+  holdElapsedSec = 0;
   injecting = false;                    // 最初は停止、一定静止で開始
   updateFromClientXY(e.clientX, e.clientY);
   // 一部ブラウザでのスクロール抑制
@@ -360,7 +393,7 @@ function onPointerDown(e){
     renderer.domElement.setPointerCapture(pointerId);
   }
 }
-
+*/
 function onPointerMove(e){
   if (pointerId !== e.pointerId) return;
   updateFromClientXY(e.clientX, e.clientY);
