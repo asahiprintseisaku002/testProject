@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/loaders/controls/OrbitControls.js";
-import { TransformControls } from "three/addons/loaders//controls/TransformControls.js";
-import { GLTFLoader } from "three/addons/loaders/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const container = document.getElementById("canvas-container");
 
@@ -391,6 +391,14 @@ function fitCameraToObject(object3D, pad = 1.2) {
   camera.lookAt(center);
   controls.target.copy(center);
   controls.update();
+}
+
+// 指定オブジェクト（Mesh/Group）配下の “すべての Mesh” に処理を適用
+function applyToMeshTree(root, fn) {
+  if (!root || typeof root.traverse !== "function" || typeof fn !== "function") return;
+  root.traverse((o) => {
+    if (o.isMesh) fn(o);
+  });
 }
 
 // --- 補助: マテリアル複製（共有材を壊さない） ---
