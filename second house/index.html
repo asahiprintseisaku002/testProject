@@ -21,10 +21,19 @@
     <div id="ui">
       <h2>GLB 操作</h2>
 
+      <!--
       <div class="row">
         <label>モデル読み込み</label>
         <input id="file-input" type="file" accept=".glb,.gltf" />
       </div>
+      -->
+      <div class="row">
+        <label>グループ選択</label>
+        <select id="group-select">
+          <option value="">（なし / メッシュ単位で操作）</option>
+        </select>
+      </div>
+
 
       <div class="row">
         <label>メッシュ選択</label>
@@ -86,6 +95,7 @@
         <label>リセット</label>
         <div class="stack">
           <button id="reset-transform" class="tiny">位置/回転/スケール</button>
+          <button id="reset-selected-only" class="tiny">選択のみリセット</button>
           <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
           <button id="clear-tex" class="tiny danger">テクスチャ除去</button>
         </div>
