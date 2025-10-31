@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Three.js GLB 操作ツール</title>
+ <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
+        }
+      }
+    </script>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+      <h2>GLB 操作</h2>
+
+      <div class="row">
+        <label>モデル読み込み</label>
+        <input id="file-input" type="file" accept=".glb,.gltf" />
+      </div>
+
+      <div class="row">
+        <label>メッシュ選択</label>
+        <select id="mesh-select">
+          <option value="">（クリックで選択もOK）</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>変形モード</label>
+        <div class="stack">
+          <button id="mode-translate" class="tiny">移動</button>
+          <button id="mode-rotate" class="tiny">回転</button>
+          <button id="mode-scale" class="tiny">スケール</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>スナップ</label>
+        <div class="stack">
+          <button id="snap-move" class="tiny">移動 0.1m</button>
+          <button id="snap-rot" class="tiny">回転 90°</button>
+          <button id="snap-off" class="tiny">スナップ無効</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>90°回転</label>
+        <div class="stack">
+          <button id="rot-left" class="tiny">-90°</button>
+          <button id="rot-right" class="tiny">+90°</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>色変更</label>
+        <input id="color-input" type="color" value="#ffffff" />
+      </div>
+
+      <div class="row">
+        <label>テクスチャ</label>
+        <input id="tex-input" type="file" accept=".png,.jpg,.jpeg,.webp" />
+      </div>
+
+      <div class="row">
+        <label>半透明</label>
+        <div class="stack">
+          <button id="semi-on" class="tiny">ON</button>
+          <button id="semi-off" class="tiny">OFF</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>簡易アニメ</label>
+        <button id="pulse" class="full">ポンッと膨らむ</button>
+      </div>
+
+      <div class="row">
+        <label>リセット</label>
+        <div class="stack">
+          <button id="reset-transform" class="tiny">位置/回転/スケール</button>
+          <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
+          <button id="clear-tex" class="tiny danger">テクスチャ除去</button>
+        </div>
+      </div>
+
+      <div id="footer-note">
+        ・キャンバス上でメッシュをクリックすると選択できます。<br />
+        ・軸ギズモ（TransformControls）をドラッグすると移動/回転/拡縮できます。<br />
+        ・回転スナップ90°を有効にすると「90°回転」ボタンと相性が良いです。
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js ロジック -->
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
