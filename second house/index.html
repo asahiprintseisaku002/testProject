@@ -21,25 +21,19 @@
     <div id="ui">
       <h2>GLB 操作</h2>
 
-      <!--
-      <div class="row">
-        <label>モデル読み込み</label>
-        <input id="file-input" type="file" accept=".glb,.gltf" />
-      </div>
-      -->
       <div class="row">
         <label>グループ選択</label>
         <select id="group-select">
-          <option value="">（なし / メッシュ単位で操作）</option>
+          <option value="">（グループを選んで操作）</option>
         </select>
       </div>
 
-
+      <!-- グループの表示/非表示 -->
       <div class="row">
-        <label>メッシュ選択</label>
-        <select id="mesh-select">
-          <option value="">（クリックで選択もOK）</option>
-        </select>
+        <label>表示 / 非表示</label>
+        <div id="group-vis-list" class="stack">
+          <!-- JSで各グループのチェックボックスを動的に追加します -->
+        </div>
       </div>
 
       <div class="row">
@@ -47,7 +41,7 @@
         <div class="stack">
           <button id="mode-translate" class="tiny">移動</button>
           <button id="mode-rotate" class="tiny">回転</button>
-          <button id="mode-scale" class="tiny">スケール</button>
+          <!--<button id="mode-scale" class="tiny">スケール</button>-->
         </div>
       </div>
 
@@ -98,13 +92,14 @@
           <button id="reset-selected-only" class="tiny">選択のみリセット</button>
           <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
           <button id="clear-tex" class="tiny danger">テクスチャ除去</button>
+          <button id="show-all-groups" class="tiny">全て表示</button>
         </div>
       </div>
 
       <div id="footer-note">
-        ・キャンバス上でメッシュをクリックすると選択できます。<br />
+        ・グループを選んで軸ギズモ（TransformControls）で操作します。<br />
         ・軸ギズモ（TransformControls）をドラッグすると移動/回転/拡縮できます。<br />
-        ・回転スナップ90°を有効にすると「90°回転」ボタンと相性が良いです。
+        ・表示/非表示はチェックボックスで個別に切り替えられます。
       </div>
     </div>
   </div>

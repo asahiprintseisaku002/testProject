@@ -16,19 +16,16 @@ container.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0e0e0e);
 
-const camera = new THREE.PerspectiveCamera(
-  50,
-  container.clientWidth / container.clientHeight,
-  0.1,
-  200
-);
+const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 200);
 camera.position.set(3, 2, 5);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
 // ライト
-scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 0.8));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 0.8);
+scene.add(hemi);
+
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(5, 6, 4);
 dir.castShadow = true;
@@ -36,7 +33,8 @@ dir.shadow.mapSize.set(2048, 2048);
 scene.add(dir);
 
 // グリッド & 地面
-scene.add(new THREE.GridHelper(50, 50, 0x444444, 0x222222));
+const grid = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
+scene.add(grid);
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(50, 50),
   new THREE.MeshStandardMaterial({ color: 0x0f0f0f, roughness: 1 })
@@ -48,13 +46,11 @@ scene.add(ground);
 // ===== GLB ロード =====
 const loader = new GLTFLoader();
 
-let modelGroup = null;     // 読み込んだモデルをまとめる親
-let groups = [];           // THREE.Group の配列
-let selected = null;       // 現在の選択（Group）
-let groupRoot = null;      // 全グループの親
+let modelGroup = null;        // 読み込んだモデルをまとめる親
+let selectableMeshes = [];    // 個別選択できる Mesh
+let selected = null;          // 現在の選択（Mesh / Group）
 
 // === 手動グループ定義（大小無視 / ワイルドカード * / 正規表現OK） ===
-// ここをあなたの命名（Blenderのメッシュ名）に合わせて調整
 const MANUAL_GROUPS = {
   ceiling:        ["skeleton_top", "wall_top", "interior_wall_ceiling", "frame_top", "ceiling.*"],           // 例: ceiling, ceiling_panel ...
   front_wall:     ["front_wall", "skeleton_front", /wall.*front/i],
@@ -68,7 +64,7 @@ const MANUAL_GROUPS = {
   loft:           ["loft_floor", "ladder"]
 };
 
-// 名前マッチ（手動割当て用）
+// ── 追加：セレクタマッチ関数（なくてエラーになっていた） ──
 function selectorMatches(name, selector) {
   const n = String(name || "");
   if (selector instanceof RegExp) return selector.test(n);
@@ -76,10 +72,11 @@ function selectorMatches(name, selector) {
     const s = selector.toLowerCase();
     const m = n.toLowerCase();
     if (s.includes("*")) {
+      // ワイルドカード → 正規表現化
       const esc = s.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
       return new RegExp("^" + esc + "$", "i").test(n);
     }
-    return m === s;
+    return m === s; // 完全一致
   }
   return false;
 }
@@ -89,39 +86,38 @@ const selectionBox = new THREE.BoxHelper();
 selectionBox.visible = false;
 scene.add(selectionBox);
 
-// TransformControls（※選択中グループにのみ attach します）
+// トランスフォーム
 const tctrl = new TransformControls(camera, renderer.domElement);
 tctrl.setSize(0.9);
-tctrl.addEventListener("dragging-changed", (e) => {
-  controls.enabled = !e.value; // ドラッグ中はオービット停止
-});
+tctrl.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
 scene.add(tctrl);
 
 // ===== UI =====
 const $ = (id) => document.getElementById(id);
-const $groupSelect    = $("group-select");
-const $groupVisList   = $("group-vis-list");
-const $color          = $("color-input");
-const $tex            = $("tex-input");
-const $rotL           = $("rot-left");
-const $rotR           = $("rot-right");
-const $modeTranslate  = $("mode-translate");
-const $modeRotate     = $("mode-rotate");
-const $modeScale      = $("mode-scale");
-const $snapMove       = $("snap-move");
-const $snapRot        = $("snap-rot");
-const $snapOff        = $("snap-off");
-const $semiOn         = $("semi-on");
-const $semiOff        = $("semi-off");
-const $pulse          = $("pulse");
-const $resetXform     = $("reset-transform");
-const $resetSelOnly   = $("reset-selected-only");
-const $resetMat       = $("reset-material");
-const $clearTex       = $("clear-tex");
-const $showAllGroups  = $("show-all-groups");
+const $meshSelect     = $('mesh-select');
+const $groupSelect    = $('group-select');
+const $color          = $('color-input');
+const $tex            = $('tex-input');
+const $rotL           = $('rot-left');
+const $rotR           = $('rot-right');
+const $modeTranslate  = $('mode-translate');
+const $modeRotate     = $('mode-rotate');
+const $modeScale      = $('mode-scale');
+const $snapMove       = $('snap-move');
+const $snapRot        = $('snap-rot');
+const $snapOff        = $('snap-off');
+const $semiOn         = $('semi-on');
+const $semiOff        = $('semi-off');
+const $pulse          = $('pulse');
+const $resetXform     = $('reset-transform');
+const $resetSelOnly   = $('reset-selected-only');
+const $resetMat       = $('reset-material');
+const $clearTex       = $('clear-tex');
 
-// ★ クリック選択は廃止 → レイキャストイベントを登録しない
-// （TransformControls は選択中のグループにだけ効く）
+// レイキャスト（クリックでメッシュ選択）
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+renderer.domElement.addEventListener("pointerdown", onPointerDown);
 
 // リサイズ
 addEventListener("resize", () => {
@@ -130,25 +126,28 @@ addEventListener("resize", () => {
   renderer.setSize(container.clientWidth, container.clientHeight);
 });
 
-// モデルセット
 function setModel(sceneRoot) {
-  // 既存撤去
+  // 既存モデル撤去
   if (modelGroup) {
     scene.remove(modelGroup);
-    modelGroup.traverse((o) => {
-      if (o.isMesh && o.geometry) o.geometry.dispose?.();
+    modelGroup.traverse(o => {
+      if (o.isMesh) {
+        if (o.geometry) o.geometry.dispose?.();
+      }
     });
   }
+
   modelGroup = new THREE.Group();
   modelGroup.name = "LoadedModel";
   scene.add(modelGroup);
 
-  // 初期化 & キャッシュ
+  // 初期化
   sceneRoot.position.set(0, 0, 0);
   sceneRoot.rotation.set(0, 0, 0);
   sceneRoot.scale.set(1, 1, 1);
 
-  sceneRoot.traverse((o) => {
+  // 影＆初期キャッシュ
+  sceneRoot.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = true;
@@ -160,19 +159,28 @@ function setModel(sceneRoot) {
 
   modelGroup.add(sceneRoot);
 
+  // 選択肢の更新（個別メッシュ）
+  selectableMeshes = [];
+  sceneRoot.traverse(o => { if (o.isMesh) selectableMeshes.push(o); });
+  populateMeshSelect();
+
   // グルーピング（手動）
   buildGroupsManual(sceneRoot);
   populateGroupSelect();
-  populateGroupVisibilityUI();
 
   fitCameraToObject(sceneRoot, 1.2);
+  selectObject(sceneRoot); // まずはルート
 
-  // 初期は未選択にしておく（選んだときだけギズモ表示）
-  clearSelection();
+  // 任意：メッシュ名一覧をログ
+  logMeshNames(sceneRoot);
 }
 
-// 手動グループ化
+// ===== グループ機能 =====
+let groupRoot = null;
+let groups = []; // THREE.Group の配列
+
 function buildGroupsManual(root) {
+  // 既存のグループを撤去
   if (groupRoot) modelGroup.remove(groupRoot);
 
   groupRoot = new THREE.Group();
@@ -182,8 +190,8 @@ function buildGroupsManual(root) {
   groups = [];
   const nameToGroup = new Map();
 
-  // 空グループを作る
-  Object.keys(MANUAL_GROUPS).forEach((key) => {
+  // 1) 空グループを用意
+  Object.keys(MANUAL_GROUPS).forEach(key => {
     const g = new THREE.Group();
     g.name = `grp:${key}`;
     cacheOriginal(g);
@@ -192,20 +200,18 @@ function buildGroupsManual(root) {
     groups.push(g);
   });
 
-  // 全メッシュ収集
+  // 2) メッシュ一覧
   const allMeshes = [];
-  root.traverse((o) => {
-    if (o.isMesh) allMeshes.push(o);
-  });
+  root.traverse(o => { if (o.isMesh) allMeshes.push(o); });
 
-  // 割当
+  // 3) 手動割当（先勝ち）
   const assigned = new Set();
   for (const [key, selectors] of Object.entries(MANUAL_GROUPS)) {
     const g = nameToGroup.get(key);
     for (const mesh of allMeshes) {
       if (assigned.has(mesh)) continue;
       if (!mesh.name) continue;
-      if (selectors.some((sel) => selectorMatches(mesh.name, sel))) {
+      if (selectors.some(sel => selectorMatches(mesh.name, sel))) {
         reparentKeepWorld(mesh, g);
         mesh.userData._groupKey = key;
         assigned.add(mesh);
@@ -214,7 +220,7 @@ function buildGroupsManual(root) {
   }
 }
 
-// 親替えしてもワールド座標維持
+// 親替えしてもワールド座標を保つ
 function reparentKeepWorld(child, newParent) {
   if (!child || !newParent || child.parent === newParent) return;
   child.updateMatrixWorld(true);
@@ -227,15 +233,28 @@ function reparentKeepWorld(child, newParent) {
   child.matrix.decompose(child.position, child.quaternion, child.scale);
 }
 
-// UI: グループ選択
+// ===== 選択 UI =====
+function populateMeshSelect() {
+  $meshSelect.innerHTML = `<option value="">（クリックで選択もOK）</option>`;
+  for (let i = 0; i < selectableMeshes.length; i++) {
+    const m = selectableMeshes[i];
+    const label = m.name ? m.name : `(Mesh ${m.id})`;
+    const opt = document.createElement("option");
+    opt.value = m.id.toString();
+    opt.textContent = label;
+    $meshSelect.appendChild(opt);
+  }
+}
+
 function populateGroupSelect() {
-  $groupSelect.innerHTML = `<option value="">（グループを選んで操作）</option>`;
-  groups.forEach((g) => {
+  $groupSelect.innerHTML = `<option value="">（なし / メッシュ単位で操作）</option>`;
+  groups.forEach(g => {
     if (g.children.length === 0) return; // 空は非表示
     const key = g.name.replace(/^grp:/, "");
+    const label = groupLabel(key);
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = groupLabel(key);
+    opt.textContent = label;
     $groupSelect.appendChild(opt);
   });
 }
@@ -256,63 +275,76 @@ function groupLabel(key) {
   return jp[key] || key;
 }
 
-$groupSelect.addEventListener("change", () => {
-  const key = $groupSelect.value;
-  if (!key) { clearSelection(); return; }
-  const g = groups.find((gr) => gr.name === `grp:${key}`);
-  if (g) selectGroup(g);
+$meshSelect.addEventListener("change", () => {
+  const id = Number($meshSelect.value);
+  if (!id) return;
+  const m = selectableMeshes.find(o => o.id === id);
+  if (m) {
+    selectObject(m);
+    // メッシュが属するグループがあれば同期
+    const gkey = m.userData._groupKey;
+    if (gkey && [...$groupSelect.options].some(o => o.value === gkey)) {
+      $groupSelect.value = gkey;
+    } else {
+      $groupSelect.value = "";
+    }
+  }
 });
 
-function selectGroup(group) {
-  selected = group;
+$groupSelect.addEventListener("change", () => {
+  const key = $groupSelect.value;
+  if (!key) return; // なし → メッシュで選んでください
+  const g = groups.find(gr => gr.name === `grp:${key}`);
+  if (g) {
+    selectObject(g);
+    $meshSelect.value = ""; // メッシュ選択は解除
+  }
+});
+
+// ===== 選択・クリック =====
+function selectObject(obj) {
+  selected = obj;
   tctrl.attach(selected);
   selectionBox.setFromObject(selected);
   selectionBox.visible = true;
 }
 
-function clearSelection() {
-  selected = null;
-  tctrl.detach();
-  selectionBox.visible = false;
+function onPointerDown(ev) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+  const targets = selectableMeshes.length ? selectableMeshes : [];
+  const hits = raycaster.intersectObjects(targets, true);
+  if (hits.length) {
+    selectObject(hits[0].object);
+    // クリック時のフィードバック
+    pulseScale(selected, 1.08, 160);
+
+    // UI 同期
+    const opt = [...$meshSelect.options].find(o => Number(o.value) === selected.id);
+    if (opt) $meshSelect.value = opt.value;
+
+    const gkey = selected.userData?._groupKey;
+    if (gkey && [...$groupSelect.options].some(o => o.value === gkey)) {
+      $groupSelect.value = gkey;
+    } else {
+      $groupSelect.value = "";
+    }
+  }
 }
 
-// UI: 表示/非表示
-function populateGroupVisibilityUI() {
-  $groupVisList.innerHTML = "";
-  groups.forEach((g) => {
-    if (g.children.length === 0) return;
-    const key = g.name.replace(/^grp:/, "");
-    const id = `vis-${key}`;
-
-    const wrap = document.createElement("label");
-    wrap.className = "checkbox";
-    wrap.style.display = "flex";
-    wrap.style.gap = "6px";
-    wrap.style.alignItems = "center";
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.id = id;
-    cb.checked = g.visible;
-    cb.addEventListener("change", () => {
-      g.visible = cb.checked;
-      // 非表示にしたグループを選択中だったら解除
-      if (!g.visible && selected === g) {
-        clearSelection();
-        $groupSelect.value = "";
-      }
-    });
-
-    const lbl = document.createElement("span");
-    lbl.textContent = groupLabel(key);
-
-    wrap.appendChild(cb);
-    wrap.appendChild(lbl);
-    $groupVisList.appendChild(wrap);
-  });
+// ===== 90°回転 =====
+$rotL.addEventListener("click", () => rotateSelected(-90));
+$rotR.addEventListener("click", () => rotateSelected(+90));
+function rotateSelected(deg) {
+  if (!selected) return;
+  selected.rotateY(THREE.MathUtils.degToRad(deg));
+  selectionBox.setFromObject(selected);
 }
 
-// TransformControls モード/スナップ/回転
+// ===== モード & スナップ =====
 $modeTranslate.addEventListener("click", () => tctrl.setMode("translate"));
 $modeRotate.addEventListener("click", () => tctrl.setMode("rotate"));
 //$modeScale.addEventListener("click", () => tctrl.setMode("scale"));
@@ -333,21 +365,13 @@ $snapOff.addEventListener("click", () => {
   tctrl.setScaleSnap(null);
 });
 
-$rotL.addEventListener("click", () => rotateSelected(-90));
-$rotR.addEventListener("click", () => rotateSelected(+90));
-function rotateSelected(deg) {
-  if (!selected) return;
-  selected.rotateY(THREE.MathUtils.degToRad(deg));
-  selectionBox.setFromObject(selected);
-}
-
-// マテリアル（色/半透明/テクスチャ）…選択中グループ配下に適用
+// ===== マテリアル（色・透明・テクスチャ） =====
 $color.addEventListener("input", () => {
   if (!selected) return;
   applyToMeshTree(selected, (mesh) => {
     ensureUniqueMaterial(mesh);
     const mats = toArray(mesh.material);
-    mats.forEach((mat) => {
+    mats.forEach(mat => {
       if (mat.color) mat.color.set($color.value);
       mat.needsUpdate = true;
     });
@@ -361,7 +385,7 @@ function setSemi(flag) {
   applyToMeshTree(selected, (mesh) => {
     ensureUniqueMaterial(mesh);
     const mats = toArray(mesh.material);
-    mats.forEach((mat) => {
+    mats.forEach(mat => {
       cacheOriginal(mesh);
       mat.transparent = true;
       mat.opacity = flag ? 0.5 : (getOriginal(mesh)?.opacity ?? 1.0);
@@ -387,7 +411,7 @@ $tex.addEventListener("change", async (e) => {
   applyToMeshTree(selected, (mesh) => {
     ensureUniqueMaterial(mesh);
     const mats = toArray(mesh.material);
-    mats.forEach((mat) => {
+    mats.forEach(mat => {
       cacheOriginal(mesh);
       mat.map = texture;
       mat.needsUpdate = true;
@@ -400,7 +424,7 @@ $clearTex.addEventListener("click", () => {
   applyToMeshTree(selected, (mesh) => {
     ensureUniqueMaterial(mesh);
     const mats = toArray(mesh.material);
-    mats.forEach((mat) => {
+    mats.forEach(mat => {
       cacheOriginal(mesh);
       mat.map = null;
       mat.needsUpdate = true;
@@ -408,7 +432,7 @@ $clearTex.addEventListener("click", () => {
   });
 });
 
-// 簡易アニメ
+// ===== 簡易アニメ =====
 $pulse.addEventListener("click", () => {
   if (!selected) return;
   pulseScale(selected, 1.15, 220);
@@ -418,6 +442,7 @@ function pulseScale(obj, to = 1.1, ms = 180) {
   const peak = orig.clone().multiplyScalar(to);
   const t0 = performance.now();
   const half = t0 + ms;
+
   const easeOutQuad = (x) => 1 - (1 - x) * (1 - x);
 
   function animate(t) {
@@ -444,10 +469,10 @@ function pulseScale(obj, to = 1.1, ms = 180) {
   requestAnimationFrame(animate);
 }
 
-// リセット
+// ===== リセット =====
 $resetXform.addEventListener("click", () => {
   if (!modelGroup) return;
-  (selected ?? modelGroup).traverse((o) => {
+  (selected ?? modelGroup).traverse(o => {
     if (!o.isObject3D) return;
     const org = getOriginal(o);
     if (org?.pos && org?.rot && org?.scl) {
@@ -456,7 +481,7 @@ $resetXform.addEventListener("click", () => {
       o.scale.copy(org.scl);
     }
   });
-  if (selected) selectionBox.setFromObject(selected);
+  selectionBox.setFromObject(selected ?? modelGroup);
 });
 
 $resetSelOnly.addEventListener("click", () => {
@@ -473,7 +498,7 @@ $resetSelOnly.addEventListener("click", () => {
 
 $resetMat.addEventListener("click", () => {
   if (!modelGroup) return;
-  (selected ?? modelGroup).traverse((o) => {
+  (selected ?? modelGroup).traverse(o => {
     if (!o.isMesh) return;
     const org = getOriginal(o);
     if (!org) return;
@@ -489,15 +514,6 @@ $resetMat.addEventListener("click", () => {
         mat.needsUpdate = true;
       }
     });
-  });
-});
-
-// すべて表示
-$showAllGroups.addEventListener("click", () => {
-  groups.forEach((g) => (g.visible = true));
-  // チェックボックスも同期
-  [...$groupVisList.querySelectorAll('input[type="checkbox"]')].forEach((cb) => {
-    cb.checked = true;
   });
 });
 
@@ -521,7 +537,7 @@ function fitCameraToObject(object3D, pad = 1.2) {
 function ensureUniqueMaterial(mesh) {
   if (!mesh.isMesh) return;
   if (Array.isArray(mesh.material)) {
-    mesh.material = mesh.material.map((m) => cloneOnce(m));
+    mesh.material = mesh.material.map(m => cloneOnce(m));
   } else {
     mesh.material = cloneOnce(mesh.material);
   }
@@ -529,12 +545,10 @@ function ensureUniqueMaterial(mesh) {
 function cloneOnce(mat) {
   if (!mat || mat.userData?._cloned) return mat;
   const c = mat.clone();
-  c.userData = { ...(c.userData || {}), _cloned: true };
+  c.userData = { ...(c.userData||{}), _cloned:true };
   return c;
 }
-function toArray(x) {
-  return Array.isArray(x) ? x : [x];
-}
+function toArray(x) { return Array.isArray(x) ? x : [x]; }
 
 const ORIGINAL = new WeakMap();
 function cacheOriginal(obj) {
@@ -548,7 +562,7 @@ function cacheOriginal(obj) {
   }
   if (obj.isMesh) {
     const mats = toArray(obj.material);
-    entry.material = mats.map((m) => ({
+    entry.material = mats.map(m => ({
       color: m?.color ? m.color.clone() : null,
       opacity: m?.opacity,
       transparent: m?.transparent,
@@ -557,16 +571,19 @@ function cacheOriginal(obj) {
   }
   ORIGINAL.set(obj, entry);
 }
-function getOriginal(obj) {
-  return ORIGINAL.get(obj);
-}
+function getOriginal(obj) { return ORIGINAL.get(obj); }
 
 // 指定オブジェクト配下の Mesh に処理
 function applyToMeshTree(root, fn) {
   if (!root || typeof root.traverse !== "function" || typeof fn !== "function") return;
-  root.traverse((o) => {
-    if (o.isMesh) fn(o);
-  });
+  root.traverse((o) => { if (o.isMesh) fn(o); });
+}
+
+// 任意：メッシュ名一覧をログ
+function logMeshNames(root) {
+  const names = [];
+  root.traverse(o => { if (o.isMesh) names.push(o.name || `(Mesh ${o.id})`); });
+  console.log("Mesh names:", names);
 }
 
 // ===== ループ =====
@@ -575,5 +592,8 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// 起動時オートロード（HTTP配信で開いてください）
-loader.load("./sh-apply.glb", (gltf) => setModel(gltf.scene));
+// 起動時オートロード（※ HTTP配信で開いてください）
+loader.load("./sh-apply.glb", (gltf) => {
+  setModel(gltf.scene);
+  // setModel内で logMeshNames を呼んでいるので、ここでの sceneRoot 参照は不要
+});
