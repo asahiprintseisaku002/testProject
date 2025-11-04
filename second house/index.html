@@ -19,20 +19,24 @@
     <div id="canvas-container"></div>
 
     <div id="ui">
-      <h2>各パーツ操作</h2>
+      <h2 class="row full">各パーツ操作</h2>
 
-      <div class="row">
-        <label>パーツ選択</label>
-        <select id="group-select">
-          <option value="">（パーツを選んで操作）</option>
-        </select>
+      <div class="row collapsible">
+        <input type="checkbox" class="row-toggle" id="t-group" />
+        <label class="row-label" for="t-group">パーツ選択</label>
+        <div class="row-body">
+          <select id="group-select">
+            <option value="">（パーツを選んで操作）</option>
+          </select>
+        </div>
       </div>
 
-      <!-- グループの表示/非表示 -->
-      <div class="row">
-        <label>表示 / 非表示</label>
-        <div id="group-vis-list" class="stack">
-          <!-- JSで各グループのチェックボックスを動的に追加します -->
+      <!-- 表示 / 非表示 -->
+      <div class="row collapsible">
+        <input type="checkbox" class="row-toggle" id="t-visible" />
+        <label class="row-label" for="t-visible">表示 / 非表示</label>
+        <div class="row-body">
+          <div id="group-vis-list" class="stack"><!-- JSで動的に追加 --></div>
         </div>
       </div>
 
@@ -54,31 +58,47 @@
         </div>
       </div>-->
 
-      <div class="row">
-        <label>90°回転</label>
-        <div class="stack">
-          <button id="rot-left" class="tiny">-90°</button>
-          <button id="rot-right" class="tiny">+90°</button>
+      <!-- 90°回転 -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-rot" />
+          <label class="row-label" for="t-rot">90°回転</label>
+          <div class="row-body">
+            <div class="stack">
+              <button id="rot-left" class="tiny">-90°</button>
+              <button id="rot-right" class="tiny">+90°</button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="row">
-        <label>色変更</label>
-        <input id="color-input" type="color" value="#ffffff" />
-      </div>
-
-      <div class="row">
-        <label class="tex-input-title">テクスチャ</label>
-        <input id="tex-input" type="file" accept=".png,.jpg,.jpeg,.webp" disabled/>
-      </div>
-
-      <div class="row">
-        <label>半透明</label>
-        <div class="stack">
-          <button id="semi-on" class="tiny">ON</button>
-          <button id="semi-off" class="tiny">OFF</button>
+        <!-- 色変更 -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-color" />
+          <label class="row-label" for="t-color">色変更</label>
+          <div class="row-body">
+            <input id="color-input" type="color" value="#ffffff" />
+          </div>
         </div>
-      </div>
+
+        <!-- テクスチャ -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-tex" />
+          <label class="row-label tex-input-title" for="t-tex">テクスチャ</label>
+          <div class="row-body">
+            <input id="tex-input" type="file" accept=".png,.jpg,.jpeg,.webp" disabled />
+          </div>
+        </div>
+
+        <!-- 半透明 -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-semi" />
+          <label class="row-label" for="t-semi">半透明</label>
+          <div class="row-body">
+            <div class="stack">
+              <button id="semi-on" class="tiny">ON</button>
+              <button id="semi-off" class="tiny">OFF</button>
+            </div>
+          </div>
+        </div>
 
       <!--
       <div class="row">
@@ -87,27 +107,34 @@
       </div>
       -->
 
-      <div class="row">
-        <label>リセット</label>
-        <div class="stack reset">
-          <!-- <button id="reset-transform" class="tiny">位置/回転/スケール</button> -->
-          <button id="reset-selected-only" class="tiny">選択のみリセット</button>
-          <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
-          <button id="clear-tex" class="tiny danger"  disabled>テクスチャ除去</button>
-          <button id="show-all-groups" class="tiny">全て表示</button>
-          <button id="reset-all" class="tiny danger">全てリセット</button>
+      <!-- リセット -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-reset" />
+          <label class="row-label" for="t-reset">リセット</label>
+          <div class="row-body">
+            <div class="stack reset">
+              <button id="reset-selected-only" class="tiny">選択のみリセット</button>
+              <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
+              <button id="clear-tex" class="tiny danger" disabled>テクスチャ除去</button>
+              <button id="show-all-groups" class="tiny">全て表示</button>
+              <button id="reset-all" class="tiny danger">全てリセット</button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="row">
-        <label>撮影</label>
-        <div class="stack capture">
-          <button id="capture-png" class="full">画面を撮影（PNG保存）</button>
+        <!-- 撮影 -->
+        <div class="row collapsible">
+          <input type="checkbox" class="row-toggle" id="t-capture" />
+          <label class="row-label" for="t-capture">撮影</label>
+          <div class="row-body">
+            <div class="stack capture">
+              <button id="capture-png" class="full">画面を撮影（PNG保存）</button>
+            </div>
+          </div>
         </div>
-      </div>
 
 
-      <div id="footer-note">
+      <div id="footer-note" class="row full">
         ・グループを選んで軸ギズモ（TransformControls）で操作します。<br />
         ・軸ギズモ（TransformControls）をドラッグすると移動できます。<br />
         ・表示/非表示はチェックボックスで個別に切り替えられます。

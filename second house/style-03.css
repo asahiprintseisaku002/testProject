@@ -217,8 +217,7 @@ body {
     bottom: 0;
     top: auto;                  /* 既存の top 指定を無効化 */
     width: 90%;               /* 30%ではなく全幅に */
-    height: 30vh; 
-    min-height: 0;              /* ← ここがポイント */
+    height: 30vh;               /* ← ここがポイント */
     max-height: 40vh;
     border-radius: 12px 12px 0 0;
     z-index: 50;
@@ -229,7 +228,7 @@ body {
     backdrop-filter: blur(4px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px;     /* タイル間の余白 */
+    gap: 8px;     /* タイル間の余白 */
   }
 
     #group-vis-list{
@@ -240,13 +239,7 @@ body {
     align-items: start;
   }
 
-  h2 .row.full {
-    margin: 4px;
-  }
-
-  #ui .row { 
-    grid-column: span 1; 
-  } 
+  #ui .row { grid-column: span 1; } 
 
    #ui .row.full { 
     grid-column: 1 / -1; 
@@ -257,8 +250,7 @@ body {
     display: flex;            /* ← inline-flex を使っている場合も OK */
     flex-direction: column;   /* ← これで .row-body が必ず下へ */
     align-items: stretch;
-    width: 85%; 
-    height: auto;
+    width: auto; 
   }
 
   #ui .row.collapsible.full { 
@@ -307,26 +299,6 @@ body {
   /* 中身にある .stack も幅いっぱいに */
   #ui .row.collapsible .row-body .stack {
     width: 100%;
-  }
-
-  #ui .row.collapsible{
-    grid-column: span 1;
-    min-width: 0;  /* はみ出し防止 */
-  }
-
-  /* 開いたら UI 全幅に拡張（2列グリッドなら 1 / -1） */
-  #ui .row.collapsible:has(.row-toggle:checked){
-    grid-column: 1 / -1;
-  }
-
-  /* 中身はフル幅を使えるように */
-  #ui .row.collapsible .row-body{
-    display: none;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  #ui .row.collapsible .row-toggle:checked ~ .row-body{
-    display: block;
   }
 
 }
