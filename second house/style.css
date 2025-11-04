@@ -217,7 +217,7 @@ body {
     bottom: 0;
     top: auto;                  /* 既存の top 指定を無効化 */
     width: 90%;               /* 30%ではなく全幅に */
-    height: 30vh; 
+    height: 35vh; 
     min-height: 0;              /* ← ここがポイント */
     max-height: 40vh;
     border-radius: 12px 12px 0 0;
