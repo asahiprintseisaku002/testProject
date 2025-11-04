@@ -1,116 +1,187 @@
- html,
- body {
-   height: 100%;
-   margin: 0;
-   background: #111;
-   color: #eee;
-   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
- }
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #111;
+  color: #eee;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
 
- #app {
-   position: relative;
-   height: 100%;
- }
+#app {
+  position: relative;
+  height: 100%;
+}
 
- #canvas-container {
-   position: absolute;
-   inset: 0;
- }
+#canvas-container {
+  position: absolute;
+  inset: 0;
+}
 
- /* コントロールパネル */
- #ui {
-   position: absolute;
-   top: 12px;
-   right: 12px;
-   width: 320px;
-   background: rgba(20, 20, 20, .9);
-   border: 1px solid #333;
-   border-radius: 12px;
-   padding: 12px;
-   box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
-   backdrop-filter: blur(4px);
- }
+/* コントロールパネル */
+#ui {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 320px;
+  background: rgba(20, 20, 20, .9);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  backdrop-filter: blur(4px);
+}
 
- #ui h2 {
-   margin: 0 0 8px;
-   font-size: 16px;
- }
+#ui h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
 
- #ui .row {
-   display: flex;
-   gap: 8px;
-   align-items: center;
-   margin: 8px 0;
- }
+#ui .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
 
- #ui .row label {
-   min-width: 96px;
-   font-size: 12px;
-   color: #ccc;
- }
+#ui .row label {
+  min-width: 96px;
+  font-size: 12px;
+  color: #ccc;
+}
 
- #ui input[type="file"] {
-   width: 100%;
- }
+#ui input[type="file"] {
+  width: 100%;
+}
 
- #ui select,
- #ui input[type="text"],
- #ui input[type="color"] {
-   flex: 1;
-   padding: 6px 8px;
-   border-radius: 8px;
-   border: 1px solid #444;
-   background: #1b1b1b;
-   color: #eee;
- }
+#ui select,
+#ui input[type="text"],
+#ui input[type="color"] {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #1b1b1b;
+  color: #eee;
+}
 
- #ui button {
-   padding: 6px 10px;
-   border-radius: 8px;
-   border: 1px solid #444;
-   background: #242424;
-   color: #eee;
-   cursor: pointer;
- }
+#ui button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #242424;
+  color: #eee;
+  cursor: pointer;
+}
 
- #ui button:hover {
-   background: #2d2d2d;
- }
+#ui button:hover {
+  background: #2d2d2d;
+}
 
- #ui .muted {
-   color: #aaa;
-   font-size: 12px;
- }
+#ui .muted {
+  color: #aaa;
+  font-size: 12px;
+}
 
- #footer-note {
-   font-size: 11px;
-   color: #aaa;
-   margin-top: 6px;
-   line-height: 1.4;
- }
+#footer-note {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 6px;
+  line-height: 1.4;
+}
 
- .stack {
-   display: flex;
-   flex-wrap: wrap;
-   gap: 6px;
- }
+.stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
- .stack>* {
-   flex: 1;
- }
+.stack>* {
+  flex: 1;
+}
 
- .tiny {
-   font-size: 12px;
-   padding: 4px 6px;
- }
+.tiny {
+  font-size: 12px;
+  padding: 4px 6px;
+}
 
- .full {
-   width: 100%;
- }
+.full {
+  width: 100%;
+}
 
- .danger {
-   border-color: #723;
-   background: #361f26;
- }
+.danger {
+  border-color: #723;
+  background: #361f26;
+}
 
- A
+/* 親カードコンテナを2列グリッドに */
+#group-vis-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); /* 常に2列 */
+  gap: 8px;
+  align-items: start;
+}
+
+#group-vis-list .vis-group {
+  position: relative;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+}
+#group-vis-list .vis-group.selected {
+  box-shadow: 0 0 0 2px rgba(108,204,255,.85) inset; /* 枠線風 */
+  background: rgba(255, 255, 255, 0.3);
+}
+
+  /* 親カード（この中に親行＋子行を縦に積む） */
+#group-vis-list .vis-group {
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  min-width: 0;
+}
+
+/* 既存の行スタイルでOK。子はちょいインデント */
+#group-vis-list .vis-row.child {
+  padding-left: 16px;
+}
+
+/* 各行（中は既存どおりflexでOK） */
+#group-vis-list .vis-row {
+  display: flex;              /* 既存のまま */
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  line-height: 1.2;
+  border-radius: 6px;
+  transition: background-color .2s, box-shadow .2s;
+}
+
+#group-vis-list .vis-row span {
+  flex: 0 1 auto;
+  min-width: 0;                 /* ★これも重要 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* チェックボックスとテキストの伸縮調整（任意） */
+#group-vis-list .vis-row input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
+.stack.reset {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* 狭い時は1列にフォールバック（任意） */
+@media (max-width: 420px){
+  #group-vis-list{
+    grid-template-columns: 1fr;
+  }
+}

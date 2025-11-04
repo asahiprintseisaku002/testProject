@@ -62,45 +62,7 @@ let pickMeshes = [];                 // ← クリックで拾う対象（Mesh�
 const groupKeyToGroup = new Map();   // ← "key" → THREE.Group の参照
 
 // === 手動グループ定義（大小無視 / ワイルドカード * / 正規表現OK） ===
-// 子キー一覧を返す（親 → 子）
-function childrenKeysOf(parentKey){
-  return Object.entries(GROUP_PARENT)
-    .filter(([, parent]) => parent === parentKey)
-    .map(([child]) => child);
-}
-
-// グループと“その子グループ”の可視を再帰的に切り替え
-function setGroupVisibilityRecursive(key, visible){
-  const g = groupKeyToGroup.get(key);
-  if (!g) return;
-
-  // グループ自体
-  g.visible = !!visible;
-
-  // 中身(メッシュや中間ノード)にも反映したい場合は以下も有効に
-  g.traverse(o => { if (o !== g) o.visible = !!visible; });
-
-  // 子グループへ伝播
-  for (const childKey of childrenKeysOf(key)){
-    setGroupVisibilityRecursive(childKey, visible);
-  }
-}
-
-// （念のため）チェックボックスのON/OFFをDOMに同期
-function syncVisUIChecks(){
-  groupKeyToVisRow.forEach((row, key) => {
-    const g = groupKeyToGroup.get(key);
-    const cb = row.querySelector('input[type="checkbox"]');
-    if (cb) cb.checked = !!(g && g.visible);
-  });
-}
-
 // ここをあなたの命名（Blenderのメッシュ名）に合わせて調整
-const GROUP_PARENT = {
-  right_wall_optional: 'right_wall',
-  unit_bath_wall: 'unit_bath',
-};
-
 const MANUAL_GROUPS = {
     // ★新規：右壁のオプションだけ別枠にしたい場合
   right_wall_optional: [
@@ -271,15 +233,6 @@ function buildGroupsManual(root) {
     groupKeyToGroup.set(key, g);
   });
 
-   // ② 親子関係で付け替え（ワールド座標は維持）
-  Object.entries(GROUP_PARENT).forEach(([childKey, parentKey]) => {
-    const child  = nameToGroup.get(childKey);
-    const parent = nameToGroup.get(parentKey);
-    if (child && parent && child.parent !== parent) {
-      reparentKeepWorld(child, parent);
-    }
-  });
-
   // 全メッシュ収集
   const allMeshes = [];
   root.traverse((o) => {
@@ -328,13 +281,13 @@ function updateVisUISelection(activeKey){
 
 // UI: グループ選択
 function populateGroupSelect() {
-  $groupSelect.innerHTML = `<option value="">（なし / メッシュ単位で操作）</option>`;
-  buildGroupOrder().forEach(({key, depth}) => {
-    const g = groupKeyToGroup.get(key);
-    if (!g || g.children.length === 0) return;
+  $groupSelect.innerHTML = `<option value="">（グループを選んで操作）</option>`;
+  groups.forEach((g) => {
+    if (g.children.length === 0) return; // 空は非表示
+    const key = g.name.replace(/^grp:/, "");
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = `${'　'.repeat(depth)}${groupLabel(key)}`; // 全角spaceで簡易インデント
+    opt.textContent = groupLabel(key);
     $groupSelect.appendChild(opt);
   });
 }
@@ -345,7 +298,6 @@ function groupLabel(key) {
     front_wall: "壁（ドア側）",
     left_wall: "壁（左）",
     right_wall: "壁（窓側）",
-    right_wall_optional: "壁（右）オプション",
     back_wall: "壁（後）",
     sink: "シンク",
     air_conditioner: "エアコン",
@@ -354,6 +306,7 @@ function groupLabel(key) {
     fan: "換気扇",
     loft: "ロフト",
     optional_hidden: "ベッド",
+    right_wall_optional: "壁（右）オプション",
   };
   return jp[key] || key;
 }
@@ -363,7 +316,6 @@ $groupSelect.addEventListener("change", () => {
   if (!key) { clearSelection(); return; }
   const g = groups.find((gr) => gr.name === `grp:${key}`);
   if (g) selectGroup(g);
-  updateVisUICardSelection(key);
 });
 
 const OUTLINE_CONF = {
@@ -409,129 +361,15 @@ function highlightGroupEdges(group) {
   });
 }
 
-function parentKeyOf(key){ return GROUP_PARENT[key] || null; }
-if (typeof window !== 'undefined') window.groupKeyToGroup = groupKeyToGroup;
-
-// 1行のDOM（チェック＋ラベル）を作る。depth>0 は子とみなす
-function createVisRow(key, depth){
-  const g = groupKeyToGroup.get(key);
-  if (!g || g.children.length === 0) return null; // 空は出さない場合
-
-  const wrap = document.createElement('label');
-  wrap.className = 'checkbox vis-row' + (depth ? ' child' : '');
-  wrap.dataset.key = key;
-  wrap.style.display = 'flex';
-  wrap.style.alignItems = 'center';
-  wrap.style.gap = '6px';
-
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.id = `vis-${key}`;
-  cb.checked = g.visible;
-  cb.addEventListener('change', () => {
-    setGroupVisibilityRecursive(key, cb.checked); // 親→子へ伝播
-    syncVisUIChecks();
-    if (!g.visible && selected === g) {
-      clearSelection(); $groupSelect.value = ""; updateVisUISelection?.(null);
-    }
-    refreshPickTargets();
-  });
-
-  const lbl = document.createElement('span');
-  lbl.textContent = groupLabel(key);
-
-  wrap.appendChild(cb);
-  wrap.appendChild(lbl);
-
-  groupKeyToVisRow.set(key, wrap);
-  if (selected && selected.name === `grp:${key}`) wrap.classList.add('selected');
-  return wrap;
-}
-
-// 親カード内に、親→子（再帰）で縦積みする
-function appendParentAndChildren(container, key, depth=0, onRegister){
-  const row = createVisRow(key, depth);
-  if (row) container.appendChild(row);
-  if (onRegister) onRegister(key);
-  const children = childrenKeysOf(key);
-  children.forEach(ck => appendParentAndChildren(container, ck, depth+1, onRegister));
-}
-
-// 親を持たない“根”グループのキー一覧（＝親カードの並び順）
-function rootGroupKeys(){
-  const keys = [...groupKeyToGroup.keys()];
-  return keys.filter(k => !parentKeyOf(k));
-}
-
-const groupKeyToVisCard = new Map();
-
-function populateGroupVisibilityUI(){
-  $groupVisList.innerHTML = "";
-  groupKeyToVisRow.clear();
-  groupKeyToVisCard.clear();
-
-  // 親ごとにカードを作成（このカードが2列グリッドの1セルになる）
-  rootGroupKeys().forEach(rootKey => {
-    const g = groupKeyToGroup.get(rootKey);
-    if (!g || g.children.length === 0) return; // 空はスキップ（必要なら外す）
-
-    const card = document.createElement('div');
-    card.className = 'vis-group';
-
-    //appendParentAndChildren(card, rootKey, 0);
-
-    $groupVisList.appendChild(card);
-
-    const registerCardForKey = (k) => groupKeyToVisCard.set(k, card);
-    appendParentAndChildren(card, rootKey, 0, registerCardForKey);
-
-    if (selected && selected.name === `grp:${rootKey}`) {
-      card.classList.add('selected');
-      updateVisUICardSelection(selectedGroupKey());
-    }
-  });
-}
-
-function buildGroupOrder(){
-  const keys  = [...groupKeyToGroup.keys()];
-  const roots = keys.filter(k => !parentKeyOf(k));
-  const out = [];
-  const walk = (k, depth) => {
-    out.push({ key:k, depth });
-    childrenKeysOf(k).forEach(ch => keys.includes(ch) && walk(ch, depth+1));
-  };
-  roots.forEach(k => walk(k, 0));
-  return out;
-}
-
-
 function selectGroup(group) {
   selected = group;
-  const key = group.name.replace(/^grp:/, "");
-  const pivot = installPivotForGroup(key, { align: 'local', rebind: false });
-  tctrl.attach(pivot);  // ★ ギズモは pivot に出す
+  tctrl.attach(selected);
+  selectionBox.setFromObject(selected);
   selectionBox.visible = false;
   highlightGroupEdges(selected);
+  const key = group.name.replace(/^grp:/, "");
   updateVisUISelection(key);   // ★ 強調
-  updateVisUICardSelection(key);
 }
-
-function updateVisUICardSelection(selectedKey){
-  // いったん全カードから selected を外す
-  groupKeyToVisCard.forEach(card => card.classList.remove('selected'));
-  if (!selectedKey) return;
-  const card = groupKeyToVisCard.get(selectedKey);
-  if (card) card.classList.add('selected');
-}
-
-// グループ選択時（既存の selectGroup 内など）：
-updateVisUICardSelection(selectedGroupKey());
-
-// セレクトボックス変更時：
-$groupSelect.addEventListener('change', () => {
-  const key = $groupSelect.value || null;
-  updateVisUICardSelection(key);
-});
 
 function clearSelection() {
   selected = null;
@@ -539,7 +377,6 @@ function clearSelection() {
   selectionBox.visible = false;
   clearEdgesOutline();
   updateVisUISelection(null);  // ★ 強調解除
-  updateVisUICardSelection(null);
 }
 
 function isWorldVisible(obj){
@@ -549,36 +386,55 @@ function isWorldVisible(obj){
   return true;
 }
 
-// === ピボット管理 ===
-//const _tmpQuat = new THREE.Quaternion();
-const ORIGINAL = new WeakMap();
+// UI: 表示/非表示
+function populateGroupVisibilityUI() {
+  $groupVisList.innerHTML = "";
+  groupKeyToVisRow.clear();
 
-/**
- * 現在の状態を基準として保存します。
- * - force:true で上書き保存（pivot 再バインド時など）
- */
-function cacheOriginal(obj, { force = false } = {}) {
-  if (!force && ORIGINAL.has(obj)) return;
+  groups.forEach((g) => {
+    if (g.children.length === 0) return;
+    const key = g.name.replace(/^grp:/, "");
+    const id = `vis-${key}`;
 
-  const entry = {};
-  if (obj.isObject3D) {
-    obj.updateMatrixWorld(true);
-    entry.pos = obj.position.clone();
-    entry.rot = new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z);
-    entry.scl = obj.scale.clone();
-  }
-  if (obj.isMesh) {
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    entry.material = mats.map((m) => ({
-      color: m?.color ? m.color.clone() : null,
-      opacity: m?.opacity,
-      transparent: m?.transparent,
-      map: m?.map ?? null,
-    }));
-  }
-  ORIGINAL.set(obj, entry);
+    const wrap = document.createElement("label");
+    wrap.className = "checkbox vis-row";   // ★ 行にクラス付与
+    wrap.dataset.key = key;                // （任意）キーを保持
+    wrap.style.display = "flex";
+    wrap.style.gap = "6px";
+    wrap.style.alignItems = "center";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.checked = g.visible;
+    cb.addEventListener("change", () => {
+      g.visible = cb.checked;
+      refreshPickTargets(); 
+      // 非表示にしたグループを選択中だったら解除
+      if (!g.visible && selected === g) {
+        clearSelection();
+        $groupSelect.value = "";
+        updateVisUISelection(null);
+      }
+    });
+
+    const lbl = document.createElement("span");
+    lbl.textContent = groupLabel(key);
+
+    wrap.appendChild(cb);
+    wrap.appendChild(lbl);
+    $groupVisList.appendChild(wrap);
+
+    groupKeyToVisRow.set(key, wrap);       // ★ マップ登録
+       if (selected && selected.name === g.name) {
+         wrap.classList.add('selected');      // ★ 再描画時に選択があれば反映
+       }
+
+  });
 }
 
+// === ピボット管理 ===
+const _tmpQuat = new THREE.Quaternion();
 // === pivot & 回転ユーティリティ ===
 const pivotMap = new Map();
 function getGroupByKey(k){ return groups.find(g => g.name === `grp:${k}`) || null; }
@@ -586,55 +442,16 @@ function getBBoxBottomCenter(obj){
   const b = new THREE.Box3().setFromObject(obj), c = b.getCenter(new THREE.Vector3());
   return new THREE.Vector3(c.x, b.min.y, c.z);
 }
-
-function installPivotForGroup(key, { worldPos, align='local', rebind=false } = {}){
+function installPivotForGroup(key, { worldPos, align='local' } = {}){
   const grp = getGroupByKey(key); if (!grp) return null;
-
   let pivot = pivotMap.get(key);
   const parent = grp.parent ?? modelGroup;
-
-  // 無ければ作成
-  if (!pivot){
-    pivot = new THREE.Object3D();
-    pivot.name = `pivot:${key}`;
-    reparentKeepWorld(pivot, parent);
-    pivotMap.set(key, pivot);
-  }
-
-  // 既に pivot が親で、rebind=false なら何もしない（ズレ防止）
-  if (!rebind && grp.parent === pivot) return pivot;
-
-  // 初回 or 明示的rebind時にだけ “ピボットの姿勢” を決める
-  if (rebind || !pivot.userData?.fixed) {
-    // ★ ピボットの最終姿勢
-    pivot.position.copy(worldPos || getBBoxBottomCenter(grp));
-    if (align === 'local'){
-      const q = new THREE.Quaternion();
-      grp.getWorldQuaternion(q);
-      pivot.quaternion.copy(q);
-    } else {
-      pivot.quaternion.identity();
-    }
-    // ★ このタイミングで基準保存（早すぎ/遅すぎ防止）
-    cacheOriginal(pivot, {force:true});
-    pivot.userData.fixed = true;
-  }
-
-  // グループを pivot 配下へ（世界座標維持）
-  if (grp.parent !== pivot){
-    reparentKeepWorld(grp, pivot);
-  }
-
-  // 基準は “初回または rebind 時” のみ更新（毎回上書きしない）
-  if (rebind || !grp.userData?.pivotBound) {
-    cacheOriginal(grp, {force:true});
-    grp.userData.pivotBound = true;
-  }
-
+  if (!pivot){ pivot = new THREE.Object3D(); pivot.name = `pivot:${key}`; reparentKeepWorld(pivot, parent); pivotMap.set(key, pivot); }
+  pivot.position.copy(worldPos || getBBoxBottomCenter(grp));
+  if (align === 'local'){ const q=new THREE.Quaternion(); grp.getWorldQuaternion(q); pivot.quaternion.copy(q); } else { pivot.quaternion.identity(); }
+  reparentKeepWorld(grp, pivot);
   return pivot;
 }
-
-
 function rotateGroupLocalY(key, deg){
   const pivot = pivotMap.get(key) || installPivotForGroup(key, { align:'local' }); // 未作成なら自動生成（底面中心）
   if (!pivot) return;
@@ -783,19 +600,7 @@ $resetXform.addEventListener("click", () => {
       o.scale.copy(org.scl);
     }
   });
-   // 選択中グループの pivot も戻す
-    if (selected) {
-      const k = selectedGroupKey();
-      const p = k ? pivotMap.get(k) : null;
-      if (p) {
-        const po = getOriginal(p);
-        if (po?.pos && po?.rot && po?.scl) {
-          p.position.copy(po.pos);
-          p.rotation.set(po.rot.x, po.rot.y, po.rot.z);
-          p.scale.copy(po.scl);
-        }
-      }
-    }
+  if (selected) selectionBox.setFromObject(selected);
 });
 
 $resetSelOnly.addEventListener("click", () => {
@@ -807,17 +612,7 @@ $resetSelOnly.addEventListener("click", () => {
     o.rotation.set(org.rot.x, org.rot.y, org.rot.z);
     o.scale.copy(org.scl);
   }
-   // ★ pivot 側も
-  const k = selectedGroupKey();
-  const p = k ? pivotMap.get(k) : null;
-  if (p) {
-    const po = getOriginal(p);
-    if (po?.pos && po?.rot && po?.scl) {
-      p.position.copy(po.pos);
-      p.rotation.set(po.rot.x, po.rot.y, po.rot.z);
-      p.scale.copy(po.scl);
-    }
-  }
+  selectionBox.setFromObject(o);
 });
 
 $resetMat.addEventListener("click", () => {
@@ -906,12 +701,8 @@ function onCanvasPointerDown(ev) {
   if (selected === grp) { // 同じグループを再クリック → 解除
     clearSelection(); $groupSelect.value = ""; return;
   }
-  //selectGroup(grp);
-  //$groupSelect.value = grp.name.replace(/^grp:/, "");
   selectGroup(grp);
-  const key = grp.name.replace(/^grp:/, "");
-  $groupSelect.value = key;                 // プルダウン表示を同期
-  updateVisUICardSelection(key);  
+  $groupSelect.value = grp.name.replace(/^grp:/, "");
 }
 
 // ★ 登録（初期化のどこかで一度だけ）
@@ -953,11 +744,30 @@ function toArray(x) {
   return Array.isArray(x) ? x : [x];
 }
 
-/** 保存しておいた基準を取り出します（無ければ null） */
-function getOriginal(obj) {
-  return ORIGINAL.get(obj) ?? null;
+const ORIGINAL = new WeakMap();
+function cacheOriginal(obj) {
+  if (ORIGINAL.has(obj)) return;
+  const entry = {};
+  if (obj.isObject3D) {
+    obj.updateMatrixWorld(true);
+    entry.pos = obj.position.clone();
+    entry.rot = new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z);
+    entry.scl = obj.scale.clone();
+  }
+  if (obj.isMesh) {
+    const mats = toArray(obj.material);
+    entry.material = mats.map((m) => ({
+      color: m?.color ? m.color.clone() : null,
+      opacity: m?.opacity,
+      transparent: m?.transparent,
+      map: m?.map ?? null,
+    }));
+  }
+  ORIGINAL.set(obj, entry);
 }
-
+function getOriginal(obj) {
+  return ORIGINAL.get(obj);
+}
 
 // 指定オブジェクト配下の Mesh に処理
 function applyToMeshTree(root, fn) {
