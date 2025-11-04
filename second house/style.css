@@ -179,6 +179,22 @@ body {
   width: 100%;
 }
 
+.stack.capture {
+  width: 100%;
+}
+
+#ui :disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(20%);
+}
+
+.tex-input-title,
+#tex-input,
+#clear-tex {
+  display: none;
+}
+
 /* 狭い時は1列にフォールバック（任意） */
 @media (max-width: 420px){
   #group-vis-list{

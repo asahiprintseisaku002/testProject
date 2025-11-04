@@ -6,7 +6,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 const container = document.getElementById("canvas-container");
 
 // ===== 基本セットアップ =====
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  preserveDrawingBuffer: true, // ★ これで toDataURL 可能に
+  // alpha: true,              // 透過PNGが欲しいなら有効化＋scene.background=null
+});
+
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -195,6 +200,8 @@ const $resetSelOnly   = $("reset-selected-only");
 const $resetMat       = $("reset-material");
 const $clearTex       = $("clear-tex");
 const $showAllGroups  = $("show-all-groups");
+const $resetAll       = $("reset-all");
+const $capturePng     = $("capture-png");
 
 // ★ クリック選択は廃止 → レイキャストイベントを登録しない
 // （TransformControls は選択中のグループにだけ効く）
@@ -302,6 +309,7 @@ function buildGroupsManual(root) {
   }
 
   refreshPickTargets();
+  prebindAllPivots();  // ★ 追加：親→子で全ピボットを一度だけ固定
 }
 
 // 親替えしてもワールド座標維持
@@ -328,7 +336,7 @@ function updateVisUISelection(activeKey){
 
 // UI: グループ選択
 function populateGroupSelect() {
-  $groupSelect.innerHTML = `<option value="">（なし / メッシュ単位で操作）</option>`;
+  $groupSelect.innerHTML = `<option value="">（なし / パーツ単位で操作）</option>`;
   buildGroupOrder().forEach(({key, depth}) => {
     const g = groupKeyToGroup.get(key);
     if (!g || g.children.length === 0) return;
@@ -345,7 +353,7 @@ function groupLabel(key) {
     front_wall: "壁（ドア側）",
     left_wall: "壁（左）",
     right_wall: "壁（窓側）",
-    right_wall_optional: "壁（右）オプション",
+    right_wall_optional: "窓",
     back_wall: "壁（後）",
     sink: "シンク",
     air_conditioner: "エアコン",
@@ -357,6 +365,28 @@ function groupLabel(key) {
   };
   return jp[key] || key;
 }
+
+// 親→子の順でキーを返すユーティリティ（既に buildGroupOrder があるなら流用可）
+function listKeysRootFirst(){
+  const out = [];
+  const seen = new Set();
+  const walk = (k) => {
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(k);
+    childrenKeysOf(k).forEach(walk);
+  };
+  [...groupKeyToGroup.keys()].filter(k => !parentKeyOf(k)).forEach(walk);
+  return out;
+}
+
+// すべてのグループにピボットを“最初の一回だけ”割り当て
+function prebindAllPivots(){
+  listKeysRootFirst().forEach(key => {
+    installPivotForGroup(key, { align:'local', rebind:true });
+  });
+}
+
 
 $groupSelect.addEventListener("change", () => {
   const key = $groupSelect.value;
@@ -856,6 +886,145 @@ $showAllGroups.addEventListener("click", () => {
   });
   refreshPickTargets(); 
 });
+
+// クリックで「全てリセット」
+$resetAll.addEventListener("click", resetAll);
+
+/* -----------------------------------------
+ *  全てリセット：読み込み直後の状態へ戻す
+ *  - 変形（位置/回転/スケール）
+ *  - マテリアル（色/透明/テクスチャ）
+ *  - グループの可視状態（既定値へ）
+ *  - ピボット（pivot）の姿勢
+ *  - 選択/UIの状態
+ * ----------------------------------------*/
+function resetAll(){
+  if (!modelGroup) return;
+
+  // 1) 選択解除 ＆ アウトライン・ギズモ停止
+  clearSelection();
+
+  // 2) 変形＆材質をすべて「基準スナップショット」に戻す
+  modelGroup.traverse((o) => {
+    const org = getOriginal(o);
+    if (!org) return;
+
+    // 2-1) 位置/回転/スケール（Object3D共通）
+    if (o.isObject3D && org.pos && org.rot && org.scl){
+      o.position.copy(org.pos);
+      o.rotation.set(org.rot.x, org.rot.y, org.rot.z);
+      o.scale.copy(org.scl);
+    }
+
+    // 2-2) マテリアル（Meshのみ）
+    if (o.isMesh && org.material){
+      ensureUniqueMaterial(o);
+      const mats = toArray(o.material);
+      mats.forEach((mat, i) => {
+        const om = org.material[i];
+        if (!om) return;
+        if (mat.color && om.color) mat.color.copy(om.color);
+        mat.opacity     = om.opacity ?? 1;
+        mat.transparent = om.transparent ?? false;
+
+        // 元のテクスチャへ（新規に読み込んだmapは破棄してリーク防止）
+        if (mat.map && mat.map !== om.map) {
+          mat.map.dispose?.();
+        }
+        mat.map = om.map ?? null;
+
+        mat.needsUpdate = true;
+      });
+
+      // 初期運用に合わせる（必要なら）
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+
+  // 3) グループの可視を「既定値」に戻す
+  //    GROUP_DEFAULT_VISIBILITY に指定があるものはそれに従い、無いものは true に。
+  groupKeyToGroup.forEach((g, key) => {
+    const want = (key in GROUP_DEFAULT_VISIBILITY) ? !!GROUP_DEFAULT_VISIBILITY[key] : true;
+    setGroupVisibilityRecursive(key, want);
+  });
+  syncVisUIChecks();             // チェックボックス同期
+  updateVisUICardSelection(null);
+  updateVisUISelection(null);
+  $groupSelect.value = "";
+
+  // 4) ピッキング対象を再構築
+  refreshPickTargets();
+
+  // 5) （任意）カメラを当て直す：読み込み直後に寄せたいなら有効化
+  // const root = modelGroup; // or groupRoot でもOK
+  // fitCameraToObject(root, 1.2);
+  if (selected){
+    const k = selectedGroupKey();
+    const p = k ? pivotMap.get(k) : null;
+    if (p) resetTransformOf(p);       // ★ pivot を戻す
+    resetTransformOf(selected);       // ★ group 自体も戻す
+  }
+}
+
+$capturePng?.addEventListener('click', () => {
+  captureAndSave({ scale: 1, filePrefix: 'shot' }); // scale=1 は画面そのまま解像度
+});
+
+/**
+ * 画面を撮影してPNG保存
+ * @param {object} opts
+ * @param {number} opts.scale  1=現在の解像度、そのまま。2=2倍解像度で撮影
+ * @param {string} opts.filePrefix  ファイル名の先頭
+ */
+function captureAndSave({ scale = 1, filePrefix = 'shot' } = {}) {
+  // 高解像度撮影（アンチエイリアス強化）にしたい場合は scale=2 など
+  const canvas = renderer.domElement;
+
+  // 現在のサイズ/ピクセル比を退避
+  const oldSize = new THREE.Vector2();
+  renderer.getSize(oldSize);
+  const oldPixelRatio = renderer.getPixelRatio();
+
+  if (scale !== 1) {
+    // 一時的に解像度を上げて描画
+    renderer.setPixelRatio(oldPixelRatio * scale);
+    renderer.setSize(oldSize.x, oldSize.y, false);
+    renderer.render(scene, camera);
+  } else {
+    // ループ中でも直前フレームを確実に掴む
+    renderer.render(scene, camera);
+  }
+
+  // PNGデータ化
+  const dataUrl = canvas.toDataURL('image/png');
+
+  // 元のサイズに戻す
+  if (scale !== 1) {
+    renderer.setPixelRatio(oldPixelRatio);
+    renderer.setSize(oldSize.x, oldSize.y, false);
+  }
+
+  // ダウンロード
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `${filePrefix}_${stamp}.png`;
+  downloadDataURL(dataUrl, filename);
+}
+
+// DataURL を保存（Safari でも動くフォールバック付き）
+function downloadDataURL(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // 一部環境のフォールバック
+  if (!/download/i.test('download' in HTMLAnchorElement.prototype ? 'download' : '')) {
+    window.open(dataUrl, '_blank');
+  }
+}
 
 // ========== クリック選択 ==========
 const raycaster = new THREE.Raycaster();

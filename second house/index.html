@@ -19,12 +19,12 @@
     <div id="canvas-container"></div>
 
     <div id="ui">
-      <h2>GLB 操作</h2>
+      <h2>各パーツ操作</h2>
 
       <div class="row">
-        <label>グループ選択</label>
+        <label>パーツ選択</label>
         <select id="group-select">
-          <option value="">（グループを選んで操作）</option>
+          <option value="">（パーツを選んで操作）</option>
         </select>
       </div>
 
@@ -68,8 +68,8 @@
       </div>
 
       <div class="row">
-        <label>テクスチャ</label>
-        <input id="tex-input" type="file" accept=".png,.jpg,.jpeg,.webp" />
+        <label class="tex-input-title">テクスチャ</label>
+        <input id="tex-input" type="file" accept=".png,.jpg,.jpeg,.webp" disabled/>
       </div>
 
       <div class="row">
@@ -93,14 +93,23 @@
           <!-- <button id="reset-transform" class="tiny">位置/回転/スケール</button> -->
           <button id="reset-selected-only" class="tiny">選択のみリセット</button>
           <button id="reset-material" class="tiny">色/透明/テクスチャ</button>
-          <button id="clear-tex" class="tiny danger">テクスチャ除去</button>
+          <button id="clear-tex" class="tiny danger"  disabled>テクスチャ除去</button>
           <button id="show-all-groups" class="tiny">全て表示</button>
+          <button id="reset-all" class="tiny danger">全てリセット</button>
         </div>
       </div>
 
+      <div class="row">
+        <label>撮影</label>
+        <div class="stack capture">
+          <button id="capture-png" class="full">画面を撮影（PNG保存）</button>
+        </div>
+      </div>
+
+
       <div id="footer-note">
         ・グループを選んで軸ギズモ（TransformControls）で操作します。<br />
-        ・軸ギズモ（TransformControls）をドラッグすると移動/回転/拡縮できます。<br />
+        ・軸ギズモ（TransformControls）をドラッグすると移動できます。<br />
         ・表示/非表示はチェックボックスで個別に切り替えられます。
       </div>
     </div>
