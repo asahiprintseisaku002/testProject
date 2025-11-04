@@ -16,7 +16,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xcccccc);
+scene.background = new THREE.Color(0xfafafa);
 
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -30,7 +30,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
 // ライト
-scene.add(new THREE.HemisphereLight(0xffffff, 0x666677, 0.8));
+scene.add(new THREE.HemisphereLight(0xffffff, 0xded7cc, 0.8));
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(5, 10, 8);
@@ -42,10 +42,10 @@ scene.add(dir);
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
 // グリッド & 地面
-scene.add(new THREE.GridHelper(50, 50, 0x444444, 0x222222));
+scene.add(new THREE.GridHelper(50, 50, 0x999999, 0xaaaaaa));
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(50, 50),
-  new THREE.MeshStandardMaterial({ color: 0x0f0f0f, roughness: 1 })
+  new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 1 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -736,6 +736,7 @@ $clearTex.addEventListener("click", () => {
 });
 
 // 簡易アニメ
+/*
 $pulse.addEventListener("click", () => {
   if (!selected) return;
   pulseScale(selected, 1.15, 220);
@@ -770,8 +771,10 @@ function pulseScale(obj, to = 1.1, ms = 180) {
   }
   requestAnimationFrame(animate);
 }
+*/
 
 // リセット
+/*
 $resetXform.addEventListener("click", () => {
   if (!modelGroup) return;
   (selected ?? modelGroup).traverse((o) => {
@@ -797,7 +800,7 @@ $resetXform.addEventListener("click", () => {
       }
     }
 });
-
+*/
 $resetSelOnly.addEventListener("click", () => {
   if (!selected) return;
   const o = selected;
@@ -906,8 +909,7 @@ function onCanvasPointerDown(ev) {
   if (selected === grp) { // 同じグループを再クリック → 解除
     clearSelection(); $groupSelect.value = ""; return;
   }
-  //selectGroup(grp);
-  //$groupSelect.value = grp.name.replace(/^grp:/, "");
+
   selectGroup(grp);
   const key = grp.name.replace(/^grp:/, "");
   $groupSelect.value = key;                 // プルダウン表示を同期
