@@ -56,55 +56,29 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// === モバイル判定（768px以下をモバイル扱い） ===
+// 先頭付近に追加
 const mqMobile = window.matchMedia("(max-width: 768px)");
-function isMobile(){ return mqMobile.matches; }
+let _fitRoot = null; // 直近でフィットした対象を保持（リサイズ時に再適用）
 
-// 直近でカメラ合わせしたルートを保持（ターゲット用）
-let _fitRoot = null;
+function isMobile() { return mqMobile.matches; }
 
-// === シンプル版カメラ切替（position.set だけ） ===
-// root を渡すとその中心を target にします
-function setCameraSimple(root = null, { smooth = true } = {}){
-  if (root) _fitRoot = root;
+function applyCameraPreset(rootObj, smooth=true){
+  if (!rootObj) return;
+  _fitRoot = rootObj;
 
-  // ターゲットはルート中心（なければ原点）
-  const target = (() => {
-    if (!_fitRoot) return new THREE.Vector3(0,0,0);
-    const b = new THREE.Box3().setFromObject(_fitRoot);
-    return b.getCenter(new THREE.Vector3());
-  })();
+  // モバイルは少し引き＆見下ろし、デスクトップはやや低め
+  const pad   = isMobile() ? 1.8 : 1.2;
+  const opts  = isMobile()
+    ? { azimuthDeg: 35, elevationDeg: 32, targetYOffsetRatio: 0.10 } // UIに被らないよう少し上を見る
+    : { azimuthDeg: 35, elevationDeg: 22, targetYOffsetRatio: 0.00 };
 
-  // プリセット（数字はお好みで）
-  const desktopPos = new THREE.Vector3(8, 6, 8);
-  const mobilePos  = new THREE.Vector3(15, 6, 13);
+  // コントロール感度や距離制限も調整
+  controls.minDistance = isMobile() ? 1.2 : 0.6;
+  controls.maxDistance = isMobile() ? 14  : 24;
+  controls.enablePan   = true;
+  controls.enableZoom  = true;
 
-  const destPos = isMobile() ? mobilePos : desktopPos;
-
-  if (smooth){
-    tweenCam(destPos, target, 320);
-  } else {
-    camera.position.copy(destPos);
-    controls.target.copy(target);
-    camera.lookAt(target);
-    controls.update();
-  }
-}
-
-// なめらか移動（任意）
-function tweenCam(destPos, destTarget, ms = 320){
-  const p0 = camera.position.clone();
-  const t0 = controls.target.clone();
-  const tStart = performance.now();
-  const ease = x => 1 - (1 - x)*(1 - x); // easeOutQuad
-  (function step(t){
-    const k = Math.min((t - tStart)/ms, 1);
-    const e = ease(k);
-    camera.position.lerpVectors(p0, destPos, e);
-    controls.target.lerpVectors(t0, destTarget, e);
-    controls.update();
-    if (k < 1) requestAnimationFrame(step);
-  })(performance.now());
+  fitCameraToObject(rootObj, pad, opts, smooth);
 }
 
 
@@ -263,11 +237,15 @@ addEventListener("resize", () => {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
-  setCameraSimple(); // 直近の _fitRoot を使って再配置
+  if (_fitRoot) applyCameraPreset(_fitRoot); // スムーズに追従
 });
 
-mqMobile.addEventListener?.("change", () => setCameraSimple());
-addEventListener("orientationchange", () => setCameraSimple());
+mqMobile.addEventListener?.("change", () => {
+  if (_fitRoot) applyCameraPreset(_fitRoot);
+});
+addEventListener("orientationchange", () => {
+  if (_fitRoot) applyCameraPreset(_fitRoot);
+});
 
 
 // モデルセット
@@ -305,7 +283,7 @@ function setModel(sceneRoot) {
   populateGroupSelect();
   populateGroupVisibilityUI();
 
-  setCameraSimple(sceneRoot, { smooth: false });
+  applyCameraPreset(sceneRoot, /*smooth=*/false);
 
   // 初期は未選択にしておく（選んだときだけギズモ表示）
   clearSelection();
@@ -1147,21 +1125,55 @@ renderer.domElement.addEventListener("pointerdown", onCanvasPointerDown);
 
 
 // ===== 補助 =====
-function fitCameraToObject(object3D, pad = 1.2) {
+function fitCameraToObject(object3D, pad = 1.2, {
+  azimuthDeg = 35,        // 水平方位（右手系で +Z 正面、+X 右）
+  elevationDeg = 25,      // 見上げ/見下ろし角。大きいほど見下ろし
+  targetYOffsetRatio = 0  // ターゲットを少し上げたい時（モデル高さ比）
+} = {}, smooth = true) {
   const box = new THREE.Box3().setFromObject(object3D);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const fov = camera.fov * (Math.PI / 180);
-  let dist = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
-  dist *= pad;
+  // UIに被らないようターゲットを少し上へ（モバイル時など）
+  const target = center.clone().add(new THREE.Vector3(0, size.y * targetYOffsetRatio, 0));
 
-  camera.position.set(center.x + dist, center.y + dist * 0.7, center.z + dist);
-  camera.lookAt(center);
-  controls.target.copy(center);
-  controls.update();
+  // 距離計算（FOV基準）
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fov    = camera.fov * Math.PI / 180;
+  let dist     = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * pad;
+
+  // 方位角（θ）と仰角（φ）→ 三球座標でオフセット計算
+  const theta = THREE.MathUtils.degToRad(azimuthDeg);
+  const phi   = THREE.MathUtils.degToRad(90 - elevationDeg); // threeのSphericalは「天頂からの角度」
+  const spherical = new THREE.Spherical(dist, phi, theta);
+  const destPos = new THREE.Vector3().setFromSpherical(spherical).add(target);
+
+  if (smooth) {
+    tweenCamera(destPos, target, 450);
+  } else {
+    camera.position.copy(destPos);
+    camera.lookAt(target);
+    controls.target.copy(target);
+    controls.update();
+  }
 }
+
+function tweenCamera(destPos, destTarget, ms = 450){
+  const p0 = camera.position.clone();
+  const t0 = controls.target.clone();
+  const tStart = performance.now();
+  const ease = x => 1 - (1 - x) * (1 - x); // easeOutQuad
+
+  (function step(t){
+    const k = Math.min((t - tStart) / ms, 1);
+    const e = ease(k);
+    camera.position.lerpVectors(p0, destPos, e);
+    controls.target.lerpVectors(t0, destTarget, e);
+    controls.update();
+    if (k < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+
 
 function ensureUniqueMaterial(mesh) {
   if (!mesh.isMesh) return;

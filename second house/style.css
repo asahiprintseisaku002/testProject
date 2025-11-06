@@ -222,7 +222,8 @@ body {
     max-height: 40vh;
     border-radius: 12px 12px 0 0;
     z-index: 50;
-    overflow-y: auto;           /* 中身が多い時スクロール */
+    overflow-y: auto;  /* 中身が多い時スクロール */
+    overflow-x: hidden;         
     -webkit-overflow-scrolling: touch;
     padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     background: rgba(20,20,20,.9);
@@ -232,7 +233,22 @@ body {
     gap: 2px;     /* タイル間の余白 */
   }
 
-    #group-vis-list{
+  #ui .row {
+  margin: 0;
+}
+
+  #group-select[size]{
+    width: 100%;
+    max-height: min(40vh, 320px); /* お好みで */
+    box-sizing: border-box;
+  }
+
+  option {
+    margin-top: 2px;
+    padding: 4px;
+  }
+
+  #group-vis-list{
     --vis-cols: 2; /* 既定：2列 */
     display: grid;
     grid-template-columns: repeat(var(--vis-cols), minmax(0, 1fr));
@@ -257,8 +273,11 @@ body {
     display: flex;            /* ← inline-flex を使っている場合も OK */
     flex-direction: column;   /* ← これで .row-body が必ず下へ */
     align-items: stretch;
-    width: 85%; 
     height: auto;
+    grid-column: span 1;
+    min-width: 0;  /* はみ出し防止 */
+    width: 100%;         /* ← auto ではなく 100% に */
+    box-sizing: border-box;
   }
 
   #ui .row.collapsible.full { 
@@ -271,7 +290,7 @@ body {
 
   #ui .row.collapsible .row-label {
     display: flex;
-    width: 100%;
+    width: 85%;
     align-items: center;
     justify-content: space-between;
     min-width: 0;
@@ -288,12 +307,14 @@ body {
     color: #999;
     font-weight: 700;
     transition: transform .15s ease;
+    margin-left: auto;   /* ← フレックスで右端へ */
+    flex: 0 0 auto;      /* ← 自分の幅以上に広がらない */
   }
 
   /* 中身はデフォルト非表示、チェックで表示 */
   #ui .row.collapsible .row-body {
     display: none;
-    padding: 8px 2px 0 2px;
+    padding: 0 2px 0 2px;
     width: 100%;
     box-sizing: border-box;
   }
@@ -309,14 +330,9 @@ body {
     width: 100%;
   }
 
-  #ui .row.collapsible{
-    grid-column: span 1;
-    min-width: 0;  /* はみ出し防止 */
-  }
-
   /* 開いたら UI 全幅に拡張（2列グリッドなら 1 / -1） */
   #ui .row.collapsible:has(.row-toggle:checked){
-    grid-column: 1 / -1;
+    grid-column: unset;
   }
 
   /* 中身はフル幅を使えるように */

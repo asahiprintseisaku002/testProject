@@ -56,58 +56,6 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// === モバイル判定（768px以下をモバイル扱い） ===
-const mqMobile = window.matchMedia("(max-width: 768px)");
-function isMobile(){ return mqMobile.matches; }
-
-// 直近でカメラ合わせしたルートを保持（ターゲット用）
-let _fitRoot = null;
-
-// === シンプル版カメラ切替（position.set だけ） ===
-// root を渡すとその中心を target にします
-function setCameraSimple(root = null, { smooth = true } = {}){
-  if (root) _fitRoot = root;
-
-  // ターゲットはルート中心（なければ原点）
-  const target = (() => {
-    if (!_fitRoot) return new THREE.Vector3(0,0,0);
-    const b = new THREE.Box3().setFromObject(_fitRoot);
-    return b.getCenter(new THREE.Vector3());
-  })();
-
-  // プリセット（数字はお好みで）
-  const desktopPos = new THREE.Vector3(8, 6, 8);
-  const mobilePos  = new THREE.Vector3(15, 6, 13);
-
-  const destPos = isMobile() ? mobilePos : desktopPos;
-
-  if (smooth){
-    tweenCam(destPos, target, 320);
-  } else {
-    camera.position.copy(destPos);
-    controls.target.copy(target);
-    camera.lookAt(target);
-    controls.update();
-  }
-}
-
-// なめらか移動（任意）
-function tweenCam(destPos, destTarget, ms = 320){
-  const p0 = camera.position.clone();
-  const t0 = controls.target.clone();
-  const tStart = performance.now();
-  const ease = x => 1 - (1 - x)*(1 - x); // easeOutQuad
-  (function step(t){
-    const k = Math.min((t - tStart)/ms, 1);
-    const e = ease(k);
-    camera.position.lerpVectors(p0, destPos, e);
-    controls.target.lerpVectors(t0, destTarget, e);
-    controls.update();
-    if (k < 1) requestAnimationFrame(step);
-  })(performance.now());
-}
-
-
 // ===== GLB ロード =====
 const loader = new GLTFLoader();
 
@@ -263,12 +211,7 @@ addEventListener("resize", () => {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
-  setCameraSimple(); // 直近の _fitRoot を使って再配置
 });
-
-mqMobile.addEventListener?.("change", () => setCameraSimple());
-addEventListener("orientationchange", () => setCameraSimple());
-
 
 // モデルセット
 function setModel(sceneRoot) {
@@ -305,7 +248,7 @@ function setModel(sceneRoot) {
   populateGroupSelect();
   populateGroupVisibilityUI();
 
-  setCameraSimple(sceneRoot, { smooth: false });
+  fitCameraToObject(sceneRoot, 1.2);
 
   // 初期は未選択にしておく（選んだときだけギズモ表示）
   clearSelection();

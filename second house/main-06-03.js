@@ -56,57 +56,59 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// === モバイル判定（768px以下をモバイル扱い） ===
+// 先頭～初期化付近に追加
 const mqMobile = window.matchMedia("(max-width: 768px)");
+let _camRoot = null; // カメラ合わせの対象を保持
+
 function isMobile(){ return mqMobile.matches; }
 
-// 直近でカメラ合わせしたルートを保持（ターゲット用）
-let _fitRoot = null;
+/**
+ * シンプルなプリセット切替（camera.position.set のみ）
+ * - root のバウンディングボックス中心(center)を向く
+ * - モバイル/PCで「中心からのオフセット」を変えるだけ
+ */
+function applySimpleCamera(root, instant = true){
+  if (!root) return;
+  _camRoot = root;
 
-// === シンプル版カメラ切替（position.set だけ） ===
-// root を渡すとその中心を target にします
-function setCameraSimple(root = null, { smooth = true } = {}){
-  if (root) _fitRoot = root;
+  // 対象の中心＆サイズ
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
 
-  // ターゲットはルート中心（なければ原点）
-  const target = (() => {
-    if (!_fitRoot) return new THREE.Vector3(0,0,0);
-    const b = new THREE.Box3().setFromObject(_fitRoot);
-    return b.getCenter(new THREE.Vector3());
-  })();
+  // モバイルは少し引き＆見下ろし気味に（数値はお好みで調整）
+  const offsetMobile  = new THREE.Vector3( 15, 6, 13); // center からの相対位置
+  const offsetDesktop = new THREE.Vector3( 8, 6, 7);
 
-  // プリセット（数字はお好みで）
-  const desktopPos = new THREE.Vector3(8, 6, 8);
-  const mobilePos  = new THREE.Vector3(15, 6, 13);
+  // 底部UIに被らないよう、ターゲットを少しだけ上へ（任意）
+  const target = center.clone();
+  if (isMobile()) target.y += size.y * 0.08;
 
-  const destPos = isMobile() ? mobilePos : desktopPos;
+  const destPos = (isMobile() ? offsetMobile : offsetDesktop).add(center);
 
-  if (smooth){
-    tweenCam(destPos, target, 320);
-  } else {
+  if (instant){
     camera.position.copy(destPos);
     controls.target.copy(target);
     camera.lookAt(target);
     controls.update();
+  } else {
+    // ふわっと移動したい場合（不要ならこの else ごと削除OK）
+    const p0 = camera.position.clone();
+    const t0 = controls.target.clone();
+    const t1 = performance.now();
+    const dur = 350;
+    const ease = x => 1 - (1 - x) * (1 - x);
+
+    (function step(t){
+      const k = Math.min((t - t1)/dur, 1);
+      const e = ease(k);
+      camera.position.lerpVectors(p0, destPos, e);
+      controls.target.lerpVectors(t0, target, e);
+      controls.update();
+      if (k < 1) requestAnimationFrame(step);
+    })(performance.now());
   }
 }
-
-// なめらか移動（任意）
-function tweenCam(destPos, destTarget, ms = 320){
-  const p0 = camera.position.clone();
-  const t0 = controls.target.clone();
-  const tStart = performance.now();
-  const ease = x => 1 - (1 - x)*(1 - x); // easeOutQuad
-  (function step(t){
-    const k = Math.min((t - tStart)/ms, 1);
-    const e = ease(k);
-    camera.position.lerpVectors(p0, destPos, e);
-    controls.target.lerpVectors(t0, destTarget, e);
-    controls.update();
-    if (k < 1) requestAnimationFrame(step);
-  })(performance.now());
-}
-
 
 // ===== GLB ロード =====
 const loader = new GLTFLoader();
@@ -263,11 +265,16 @@ addEventListener("resize", () => {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
-  setCameraSimple(); // 直近の _fitRoot を使って再配置
+  if (_camRoot) applySimpleCamera(_camRoot, /* instant */ false);
 });
 
-mqMobile.addEventListener?.("change", () => setCameraSimple());
-addEventListener("orientationchange", () => setCameraSimple());
+// 画面幅が閾値をまたいだらプリセットを切替
+mqMobile.addEventListener?.("change", () => {
+  if (_camRoot) applySimpleCamera(_camRoot, /* instant */ false);
+});
+addEventListener("orientationchange", () => {
+  if (_camRoot) applySimpleCamera(_camRoot, /* instant */ false);
+});
 
 
 // モデルセット
@@ -305,7 +312,8 @@ function setModel(sceneRoot) {
   populateGroupSelect();
   populateGroupVisibilityUI();
 
-  setCameraSimple(sceneRoot, { smooth: false });
+  //fitCameraToObject(sceneRoot, 1.2);
+  applySimpleCamera(sceneRoot, /* instant */ true);
 
   // 初期は未選択にしておく（選んだときだけギズモ表示）
   clearSelection();
