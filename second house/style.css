@@ -345,4 +345,8 @@ body {
     display: block;
   }
 
+  div#tex-row.row.collapsible {
+    display: none;
+  }
+
 }
