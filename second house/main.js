@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { PMREMGenerator } from 'three';
 
 const container = document.getElementById("canvas-container");
 
@@ -23,6 +26,17 @@ container.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xfafafa);
 
+const pmrem = new PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.001).texture;
+/*
+new RGBELoader().load('/hdr/room.hdr', (hdr) => {
+  const envMap = pmrem.fromEquirectangular(hdr).texture;
+  scene.environment = envMap;   // 重要（反射用）
+  // scene.background = envMap; // 背景もHDRにしたい場合だけ
+  hdr.dispose();
+});
+*/
+
 const camera = new THREE.PerspectiveCamera(
   50,
   container.clientWidth / container.clientHeight,
@@ -37,7 +51,7 @@ controls.enableDamping = true;
 // ライト
 scene.add(new THREE.HemisphereLight(0xffffff, 0xded7cc, 0.8));
 
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+const dir = new THREE.DirectionalLight(0xffffff, 2.0);
 dir.position.set(5, 10, 8);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
@@ -166,22 +180,74 @@ const MANUAL_GROUPS = {
     "wall_r_window_r"
   ],
 
-  ceiling:        ["skeleton_top", "wall_top", "interior_wall_ceiling", "frame_top", "ceiling.*"],           // 例: ceiling, ceiling_panel ...
-  front_wall:     ["front_wall", "skeleton_front", /wall.*front/i],
-  left_wall:      ["left_wall", "skeleton_l", "wall_l", "interior_wall_l", "wall_left.*"],
-  right_wall:     ["right_wall", "skeleton_r", "wall_r", /*"wall_r_window_frame", "wall_r_window_r", "wall_r_window_l", */"interior_wall_r", "wall_right.*"],
-  back_wall:      ["skeleton_back", "wall_back", "interior_wall_back"],
-  sink:           ["sink", "kitchen_sink.*", /シンク/],
-  air_conditioner:["air_conditioner", "ac_unit", "aircon.*", /エアコン/],
-  fan:            ["fan", "fan_blade", "fan_switch"],
-  unit_bath:      ["ub_toilet_seat", "ub_toilet_cover", "unitbath"],
-  unit_bath_wall: ["unitbath_wrap", "ub_door"],
-  loft:           ["loft_floor", "ladder"],
+  ceiling: [
+    "skeleton_top", 
+    "wall_top", 
+    "interior_wall_ceiling", 
+    "frame_top", 
+    
+  ],
+
+  front_wall: [
+    "wall_front", 
+    "skeleton_front",
+    "wall_front_door", 
+    "interior_wall_front",
+    "Cube017","Cube017_1","Cube017_2"
+  ],
+
+  left_wall: [
+    "left_wall", 
+    "skeleton_l", 
+    "wall_l", 
+    "interior_wall_l", 
+    ],
+
+  right_wall: [
+    "right_wall", 
+    "skeleton_r", 
+    "wall_r",
+    "interior_wall_r", 
+    ],
+
+  back_wall: [
+    "skeleton_back", 
+    "wall_back", 
+    "interior_wall_back"
+  ],
+
+  sink: [
+    "Cube078","Cube078_1","Cube078_2","Cube078_3","Cube078_4","Cube078_5","Cube078_6", //"sink"
+  ],
+
+  air_conditioner: [
+    "Cube107", "Cube107_1", "Cube107_2", "Cube107_3", //"ac_unit"
+  ],
+
+  fan: [
+    "Cylinder011","Cylinder011_1", //"fan_blade",
+    "Cylinder013", "Cylinder013_1", //"fan", 
+    "Cylinder016", "Cylinder016_1", //"fan_switch",
+  ],
+
+  unit_bath: [
+    "ub_toilet_seat", 
+    "ub_toilet_cover", 
+    "Cube064","Cube064_1","Cube064_2","Cube064_3", //"unitbath"
+  ],
+
+  unit_bath_wall: [
+    "unitbath_wrap", 
+    "Cube053", "Cube053_1", ///"ub_door"
+  ],
+
+  loft: [
+    "Cube061", "Cube061_1", // "ladder"
+    "Cube058", "Cube058_1" // "loft_floor"
+  ],
 
   // ★新規：初期は非表示にしたい部品群（例）
   optional_hidden: ["bed_frame"], // ワイルドカード可
-
-
 };
 
 const GROUP_DEFAULT_VISIBILITY = {
@@ -200,6 +266,41 @@ const GROUP_DEFAULT_VISIBILITY = {
   optional_hidden: false,          // ← 初期は非表示
   right_wall_optional: true       // ← 右壁のオプション群を初期非表示にしたい場合
 };
+
+// ========== デバッグ出力用 ==========
+// メッシュ配列を {id, name} の配列に整形
+function _asRows(meshes){
+  return meshes.map(m => ({ id: m.id, name: m.name || `(id:${m.id})` }));
+}
+
+// グループ割当の結果を出力
+function logGroupingResult({ assignedByGroup, unassigned }){
+  console.groupCollapsed('%c[Grouping] 割当結果', 'color:#8cf');
+  // 各グループごとの割当一覧
+  assignedByGroup.forEach((arr, key) => {
+    console.groupCollapsed(`%c${key} (${arr.length})`, 'color:#5fa');
+    console.table(_asRows(arr));
+    console.groupEnd();
+  });
+
+  // 未割当
+  if (unassigned.length){
+    console.warn(`[未割当 ${unassigned.length}]`);
+    console.table(_asRows(unassigned));
+  } else {
+    console.log('%c未割当なし', 'color:#5fa');
+  }
+
+  // 空グループ（DOMには出さない運用でも把握したい時用）
+  const empties = [...groupKeyToGroup.keys()].filter(k => {
+    const g = groupKeyToGroup.get(k);
+    return g && g.children.length === 0;
+  });
+  if (empties.length){
+    console.info('[空グループ]', empties);
+  }
+  console.groupEnd();
+}
 
 // 名前マッチ（手動割当て用）
 function selectorMatches(name, selector) {
@@ -352,6 +453,7 @@ function buildGroupsManual(root) {
 
   // 割当
   const assigned = new Set();
+  const assignedByGroup = new Map();  // 追加: 集計用 groupKey -> Mesh[]
   for (const [key, selectors] of Object.entries(MANUAL_GROUPS)) {
     const g = nameToGroup.get(key);
     for (const mesh of allMeshes) {
@@ -361,9 +463,16 @@ function buildGroupsManual(root) {
         reparentKeepWorld(mesh, g);
         mesh.userData._groupKey = key;
         assigned.add(mesh);
+
+        // ▼ 追加: グループ別リスト
+        if (!assignedByGroup.has(key)) assignedByGroup.set(key, []);
+        assignedByGroup.get(key).push(mesh);
       }
     }
   }
+  // ▼ 追加: 未割当の抽出 & ログ
+  const unassigned = allMeshes.filter(m => !assigned.has(m));
+  logGroupingResult({ assignedByGroup, unassigned });
 
   refreshPickTargets();
   prebindAllPivots();  // ★ 追加：親→子で全ピボットを一度だけ固定
@@ -1227,4 +1336,31 @@ renderer.setAnimationLoop(() => {
 });
 
 // 起動時オートロード（HTTP配信で開いてください）
-loader.load("./sh-apply-color.glb", (gltf) => setModel(gltf.scene));
+//loader.load("./sh-apply-color.glb", (gltf) => setModel(gltf.scene));
+
+function dumpGLTFNames(gltf) {
+  const { parser } = gltf;
+  console.groupCollapsed('[Debug] GLTF names map');
+  gltf.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const assoc = parser.associations.get(o) || {};
+    const nodeIndex = assoc.node ?? assoc.nodes?.[0];
+    const meshIndex = assoc.mesh;
+    const primIndex = assoc.primitive;
+    const nodeDef = (nodeIndex != null) ? parser.json.nodes[nodeIndex] : null; // Blenderのオブジェクト名
+    const meshDef = (meshIndex != null) ? parser.json.meshes[meshIndex] : null; // メッシュデータ名
+    console.log({
+      threeName: o.name,                     // Three.js上で見える名前（= glTF node.name が多い）
+      blenderObject: nodeDef?.name ?? null,  // Blenderのオブジェクト名
+      blenderMeshData: meshDef?.name ?? null,// Blenderのメッシュデータ名
+      primitive: primIndex                   // マルチマテリアル分割の何番目か
+    });
+  });
+  console.groupEnd();
+}
+
+// 読み込み時に呼ぶ
+loader.load('./sh-apply-color.glb', (gltf) => {
+  dumpGLTFNames(gltf);
+  setModel(gltf.scene);
+});
