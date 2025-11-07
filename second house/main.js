@@ -1227,4 +1227,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // 起動時オートロード（HTTP配信で開いてください）
-loader.load("./sh-apply.glb", (gltf) => setModel(gltf.scene));
+loader.load("./sh-apply-color.glb", (gltf) => setModel(gltf.scene));
