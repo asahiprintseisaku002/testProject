@@ -333,11 +333,16 @@ const GROUP_DEFAULT_VISIBILITY = {
   front_wall_optional: true
 };
 
-// 追加：クリック選択を無効化したいグループキー
-const NON_PICKABLE_GROUP_KEYS = new Set([
-  'unit_bath_wall',
+// 子をクリックしたら親を選ぶ対象グループキー
+const FORCE_PARENT_ON_CLICK = new Set([
+  'unit_bath_wall', 
   'right_wall_optional',
   'front_wall_optional', 
+]);
+
+// 追加：クリック選択を無効化したいグループキー
+const NON_PICKABLE_GROUP_KEYS = new Set([
+
 ]); 
 
 // ========== デバッグ出力用 ==========
@@ -1305,34 +1310,66 @@ function findGroupForObject(obj) {
   return null;
 }
 
+function groupKeyFromGroup(g){
+  return (g && typeof g.name === 'string' && g.name.startsWith('grp:'))
+    ? g.name.slice(4) : null;
+}
+
+// オブジェクトにヒットした時に、実際に選ぶべき“昇格済みグループ”を返す
+function resolveClickGroupFromObject(obj){
+  let grp = findGroupForObject(obj);
+  if (!grp) return null;
+
+  let key = groupKeyFromGroup(grp);
+  if (!key) return grp;
+
+  // 子 → 親 へ昇格（最大8段で安全停止）
+  let guard = 0;
+  while (
+    (FORCE_PARENT_ON_CLICK.has(key) || NON_PICKABLE_GROUP_KEYS.has(key)) &&
+    parentKeyOf(key) &&
+    guard++ < 8
+  ){
+    key = parentKeyOf(key);
+  }
+  return groupKeyToGroup.get(key) || grp;
+}
+
 function onCanvasPointerDown(ev) {
   if (tctrl.dragging || ev.button !== 0) return;
 
   setPointerFromEvent(ev);
   raycaster.setFromCamera(pointer, camera);
-
   const hits = raycaster.intersectObjects(pickMeshes, true);
 
-  // 可視なものだけを選択候補に
-  const hit = hits.find(h => isWorldVisible(h.object));
-  if (!hit) { clearSelection(); $groupSelect.value = ""; return; }
+  for (const h of hits){
+    // 近い順に、可視で“選べる”グループを決定
+    const g = resolveClickGroupFromObject(h.object);
+    if (!g) continue;
+    if (!isWorldVisible(g)) continue;
 
-  const grp = findGroupForObject(hit.object);
+    // 同じグループならトグル解除
+    if (selected === g){
+      clearSelection();
+      $groupSelect.value = "";
+      updateVisUICardSelection?.(null);
+      return;
+    }
 
-  // グループ自体が非表示なら選択解除
-  if (!grp || !isWorldVisible(grp)) {
-    clearSelection(); $groupSelect.value = ""; return;
+    // 選択
+    selectGroup(g);
+    const key = groupKeyFromGroup(g) || "";
+    $groupSelect.value = key;                 // セレクト同期
+    updateVisUICardSelection?.(key);          // カード側のハイライト同期（あれば）
+    return;
   }
 
-  if (selected === grp) { // 同じグループを再クリック → 解除
-    clearSelection(); $groupSelect.value = ""; return;
-  }
-
-  selectGroup(grp);
-  const key = grp.name.replace(/^grp:/, "");
-  $groupSelect.value = key;                 // プルダウン表示を同期
-  updateVisUICardSelection(key);  
+  // ヒットなし → 解除
+  clearSelection();
+  $groupSelect.value = "";
+  updateVisUICardSelection?.(null);
 }
+
 
 // ★ 登録（初期化のどこかで一度だけ）
 renderer.domElement.addEventListener("pointerdown", onCanvasPointerDown);
