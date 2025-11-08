@@ -29,6 +29,7 @@ scene.background = new THREE.Color(0xfafafa);
 const pmrem = new PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.001).texture;
 /*
+// 環境ファイルの読み込み
 new RGBELoader().load('/hdr/room.hdr', (hdr) => {
   const envMap = pmrem.fromEquirectangular(hdr).texture;
   scene.environment = envMap;   // 重要（反射用）
@@ -77,9 +78,8 @@ function isMobile(){ return mqMobile.matches; }
 // 直近でカメラ合わせしたルートを保持（ターゲット用）
 let _fitRoot = null;
 
-// === シンプル版カメラ切替（position.set だけ） ===
+// === カメラ切替 ===
 // root を渡すとその中心を target にします
-// ==== 差し替え版 ===
 // 進行中のTweenを止める
 let _camTweenReq = null;
 function cancelCamTween(){
@@ -233,6 +233,7 @@ function syncVisUIChecks(){
 const GROUP_PARENT = {
   right_wall_optional: 'right_wall',
   unit_bath_wall: 'unit_bath',
+  front_wall_optional: 'front_wall'
 };
 
 const MANUAL_GROUPS = {
@@ -241,6 +242,10 @@ const MANUAL_GROUPS = {
     "wall_r_window_frame",
     "wall_r_window_l",
     "wall_r_window_r"
+  ],
+
+  front_wall_optional: [
+     "Cube017", "Cube017_1", "Cube017_2"
   ],
 
   ceiling: [
@@ -254,9 +259,7 @@ const MANUAL_GROUPS = {
   front_wall: [
     "wall_front", 
     "skeleton_front",
-    "wall_front_door", 
     "interior_wall_front",
-    "Cube017","Cube017_1","Cube017_2"
   ],
 
   left_wall: [
@@ -313,6 +316,7 @@ const MANUAL_GROUPS = {
   optional_hidden: ["bed_frame"], // ワイルドカード可
 };
 
+// falseで初期状態は非表示
 const GROUP_DEFAULT_VISIBILITY = {
   ceiling: true,
   front_wall: true,
@@ -324,11 +328,17 @@ const GROUP_DEFAULT_VISIBILITY = {
   unit_bath: true,
   unit_bath_wall: true,
   loft: true,
-
-  // 例）新規で“初期は非表示”にしたいグループ
-  optional_hidden: false,          // ← 初期は非表示
-  right_wall_optional: true       // ← 右壁のオプション群を初期非表示にしたい場合
+  optional_hidden: false,          
+  right_wall_optional: true,
+  front_wall_optional: true
 };
+
+// 追加：クリック選択を無効化したいグループキー
+const NON_PICKABLE_GROUP_KEYS = new Set([
+  'unit_bath_wall',
+  'right_wall_optional',
+  'front_wall_optional', 
+]); 
 
 // ========== デバッグ出力用 ==========
 // メッシュ配列を {id, name} の配列に整形
@@ -583,6 +593,7 @@ function groupLabel(key) {
   const jp = {
     ceiling: "天井",
     front_wall: "壁（ドア側）",
+    front_wall_optional: "ドア",
     left_wall: "壁（左）",
     right_wall: "壁（窓側）",
     right_wall_optional: "窓",
@@ -1265,7 +1276,13 @@ const pointer = new THREE.Vector2();
 function refreshPickTargets() {
   pickMeshes = [];
   if (!modelGroup) return;
-  modelGroup.traverse(o => { if (o.isMesh) pickMeshes.push(o); });
+  modelGroup.traverse(o => {
+    if (!o.isMesh) return;
+    const key = o.userData?._groupKey;
+    // ここで除外（例：unit_bath_wall はクリック不可）
+    if (key && NON_PICKABLE_GROUP_KEYS.has(key)) return;
+    pickMeshes.push(o);
+  });
 }
 
 function setPointerFromEvent(ev) {
