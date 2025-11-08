@@ -105,7 +105,7 @@ function setCameraSimple(root = null, { smooth = true } = {}) {
 
   // プリセット
   const desktopPos = new THREE.Vector3(8, 6, 8);
-  const mobilePos  = new THREE.Vector3(15, 6, 13);
+  const mobilePos  = new THREE.Vector3(10, 8, 15);
   const destPos    = isMobile() ? mobilePos : desktopPos;
 
   // smooth の解釈:
