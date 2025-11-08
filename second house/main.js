@@ -79,7 +79,21 @@ let _fitRoot = null;
 
 // === シンプル版カメラ切替（position.set だけ） ===
 // root を渡すとその中心を target にします
-function setCameraSimple(root = null, { smooth = true } = {}){
+// ==== 差し替え版 ===
+// 進行中のTweenを止める
+let _camTweenReq = null;
+function cancelCamTween(){
+  if (_camTweenReq) {
+    cancelAnimationFrame(_camTweenReq);
+    _camTweenReq = null;
+  }
+}
+
+// controls操作でTweenを止める（ドラッグ/ホイールなど）
+controls.addEventListener('start', cancelCamTween);
+window.addEventListener('wheel', cancelCamTween, { passive: true });
+
+function setCameraSimple(root = null, { smooth = true } = {}) {
   if (root) _fitRoot = root;
 
   // ターゲットはルート中心（なければ原点）
@@ -89,35 +103,84 @@ function setCameraSimple(root = null, { smooth = true } = {}){
     return b.getCenter(new THREE.Vector3());
   })();
 
-  // プリセット（数字はお好みで）
+  // プリセット
   const desktopPos = new THREE.Vector3(8, 6, 8);
   const mobilePos  = new THREE.Vector3(15, 6, 13);
+  const destPos    = isMobile() ? mobilePos : desktopPos;
 
-  const destPos = isMobile() ? mobilePos : desktopPos;
-
-  if (smooth){
-    tweenCam(destPos, target, 320);
-  } else {
+  // smooth の解釈:
+  //  - false          : 即座に移動
+  //  - number         : その値(ms)の線形Tween
+  //  - {ms, easing, damping, snap} のオプション
+  if (!smooth) {
+    cancelCamTween();
     camera.position.copy(destPos);
     controls.target.copy(target);
     camera.lookAt(target);
     controls.update();
+    return;
   }
+
+  // デフォルトは「短めの線形＋ダンピング無効化＋最後スナップ」
+  const opts = (typeof smooth === 'object')
+    ? smooth
+    : { ms: (typeof smooth === 'number' ? smooth : 200), easing: 'linear', damping: false, snap: true };
+
+  tweenCam(destPos, target, opts);
 }
 
-// なめらか移動（任意）
-function tweenCam(destPos, destTarget, ms = 320){
+// なめらか移動（調整版）
+function tweenCam(destPos, destTarget, {
+  ms = 200,
+  easing = 'linear',     // 'linear' | 'easeOutQuad' | 'easeInOutQuad'
+  damping = false,       // Tween中にOrbitControlsのダンピングを無効化するか
+  snap = true            // 終了時に最終値を強制セットして「ピタッ」と止める
+} = {}) {
+  cancelCamTween();
+
   const p0 = camera.position.clone();
   const t0 = controls.target.clone();
+
+  // イージング関数
+  const eases = {
+    linear: x => x,
+    easeOutQuad: x => 1 - (1 - x) * (1 - x),
+    easeInOutQuad: x => (x < 0.5 ? 2*x*x : 1 - Math.pow(-2*x+2, 2)/2),
+  };
+  const ease = eases[easing] || eases.linear;
+
+  // ダンピングを一時的にOFF
+  const prevDampingEnabled = controls.enableDamping;
+  const prevDampingFactor  = controls.dampingFactor;
+  if (damping === false) {
+    controls.enableDamping = false;
+  }
+
   const tStart = performance.now();
-  const ease = x => 1 - (1 - x)*(1 - x); // easeOutQuad
-  (function step(t){
-    const k = Math.min((t - tStart)/ms, 1);
+  (function step(now){
+    const k = Math.min((now - tStart) / ms, 1);
     const e = ease(k);
+
     camera.position.lerpVectors(p0, destPos, e);
     controls.target.lerpVectors(t0, destTarget, e);
     controls.update();
-    if (k < 1) requestAnimationFrame(step);
+
+    if (k < 1) {
+      _camTweenReq = requestAnimationFrame(step);
+    } else {
+      _camTweenReq = null;
+
+      // 終了時の「ピタッ」補正
+      if (snap) {
+        camera.position.copy(destPos);
+        controls.target.copy(destTarget);
+        camera.lookAt(destTarget);
+        controls.update();
+      }
+      // ダンピング復帰
+      controls.enableDamping = prevDampingEnabled;
+      controls.dampingFactor = prevDampingFactor;
+    }
   })(performance.now());
 }
 
@@ -166,7 +229,7 @@ function syncVisUIChecks(){
   });
 }
 
-// ここをあなたの命名（Blenderのメッシュ名）に合わせて調整
+// 親子関係の親
 const GROUP_PARENT = {
   right_wall_optional: 'right_wall',
   unit_bath_wall: 'unit_bath',
@@ -407,6 +470,9 @@ function setModel(sceneRoot) {
   populateGroupVisibilityUI();
 
   setCameraSimple(sceneRoot, { smooth: false });
+  setCameraSimple(modelGroup, { smooth: false });
+  //setCameraSimple(modelGroup, { smooth: 120 });
+  //setCameraSimple(modelGroup, { smooth: { ms: 180, easing: 'linear', damping: false, snap: true }});
 
   // 初期は未選択にしておく（選んだときだけギズモ表示）
   clearSelection();
