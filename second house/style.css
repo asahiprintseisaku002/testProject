@@ -203,12 +203,20 @@ body {
 
 .row-label.tex-input-title,
 #tex-input,
-#clear-tex {
+#clear-tex,
+#show-all-groups {
   display: none;
 }
 
 #header-note {
-  display: none;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: block;
+  font-size: 11px;
+  color: #555555;
+  line-height: 1.6em;
+  z-index: 10;
 }
 
 /* ===== モバイル時（アコーディオン化） ===== */
@@ -355,17 +363,6 @@ body {
 
   div#tex-row.row.collapsible {
     display: none;
-  }
-
-  #header-note {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    display: block;
-    font-size: 11px;
-    color: #555555;
-    line-height: 1.6em;
-    z-index: 10;
   }
 
   div#footer-note.row.full {
