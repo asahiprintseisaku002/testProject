@@ -212,16 +212,18 @@ body {
 }
 
 /* ===== モバイル時（アコーディオン化） ===== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   /* UI幅を画面の30%に */
   #ui {
     position: fixed;
-    left: 8px;
-    right: 8px;
+    left: 50%;
     bottom: 0;
-    top: auto;                  /* 既存の top 指定を無効化 */
-    width: 90%;               /* 30%ではなく全幅に */
+    top: auto; 
+    right: auto; 
     height: 23vh; 
+    transform: translateX(-50%);
+    width: min(980px, calc(100% - 16px));
+    box-sizing: border-box;
     min-height: 0;              /* ← ここがポイント */
     max-height: 40vh;
     border-radius: 12px 12px 0 0;
@@ -295,7 +297,8 @@ body {
 
   #ui .row.collapsible .row-label {
     display: flex;
-    width: 85%;
+    width: 100%;
+    box-sizing: border-box;
     align-items: center;
     justify-content: space-between;
     min-width: 0;

@@ -71,9 +71,16 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// === モバイル判定（768px以下をモバイル扱い） ===
-const mqMobile = window.matchMedia("(max-width: 768px)");
+// ---- 先頭付近（グローバルに1か所）----
+const BREAKPOINT = 1024;
+
+// === モバイル判定（1024px以下をモバイル扱い） ===
+const mqMobile = window.matchMedia(`(max-width:${BREAKPOINT}px)`);
 function isMobile(){ return mqMobile.matches; }
+
+// ブレイクポイント変化でカメラを合わせ直す
+if (mqMobile.addEventListener) mqMobile.addEventListener('change', () => setCameraSimple());
+else mqMobile.addListener(() => setCameraSimple()); // 旧Safari対策
 
 // 直近でカメラ合わせしたルートを保持（ターゲット用）
 let _fitRoot = null;
@@ -1425,7 +1432,6 @@ function applyToMeshTree(root, fn) {
 }
 
 (function responsiveSelect(){
-  const BREAKPOINT = 768; // px
   const sel = document.getElementById('group-select');
   if (!sel) return;
 
