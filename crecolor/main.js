@@ -26,7 +26,7 @@ const PARAMS = {
   holdMaxStrengthScale:   2.5,    // 濃さは最大で base*2.5 まで
   followDelayMs: 200,   // 注入開始から何ms待って追従を始めるか（“後に動く”感）
   followTau:     0.35,  // 追従の時定数（秒）小さい=素早く追う, 大きい=ゆっくり
-  followWhenDown: false, // 押下中にも追うなら true。離した後だけなら false
+  followWhenDown: true, // 押下中にも追うなら true。離した後だけなら false
 
     // ★ 追加：動作に応じた減衰
   decayWhileMove: 0.003,  // 動いている間の減衰（ゆっくり消える）

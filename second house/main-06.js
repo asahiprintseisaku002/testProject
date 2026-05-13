@@ -2,9 +2,6 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { PMREMGenerator } from 'three';
 
 const container = document.getElementById("canvas-container");
 
@@ -26,18 +23,6 @@ container.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xfafafa);
 
-const pmrem = new PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.001).texture;
-/*
-// 環境ファイルの読み込み
-new RGBELoader().load('/hdr/room.hdr', (hdr) => {
-  const envMap = pmrem.fromEquirectangular(hdr).texture;
-  scene.environment = envMap;   // 重要（反射用）
-  // scene.background = envMap; // 背景もHDRにしたい場合だけ
-  hdr.dispose();
-});
-*/
-
 const camera = new THREE.PerspectiveCamera(
   50,
   container.clientWidth / container.clientHeight,
@@ -52,7 +37,7 @@ controls.enableDamping = true;
 // ライト
 scene.add(new THREE.HemisphereLight(0xffffff, 0xded7cc, 0.8));
 
-const dir = new THREE.DirectionalLight(0xffffff, 2.0);
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(5, 10, 8);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
@@ -70,127 +55,6 @@ const ground = new THREE.Mesh(
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
-
-// ---- 先頭付近（グローバルに1か所）----
-const BREAKPOINT = 1024;
-
-// === モバイル判定（1024px以下をモバイル扱い） ===
-const mqMobile = window.matchMedia(`(max-width:${BREAKPOINT}px)`);
-function isMobile(){ return mqMobile.matches; }
-
-// ブレイクポイント変化でカメラを合わせ直す
-if (mqMobile.addEventListener) mqMobile.addEventListener('change', () => setCameraSimple());
-else mqMobile.addListener(() => setCameraSimple()); // 旧Safari対策
-
-// 直近でカメラ合わせしたルートを保持（ターゲット用）
-let _fitRoot = null;
-
-// === カメラ切替 ===
-// root を渡すとその中心を target にします
-// 進行中のTweenを止める
-let _camTweenReq = null;
-function cancelCamTween(){
-  if (_camTweenReq) {
-    cancelAnimationFrame(_camTweenReq);
-    _camTweenReq = null;
-  }
-}
-
-// controls操作でTweenを止める（ドラッグ/ホイールなど）
-controls.addEventListener('start', cancelCamTween);
-window.addEventListener('wheel', cancelCamTween, { passive: true });
-
-function setCameraSimple(root = null, { smooth = true } = {}) {
-  if (root) _fitRoot = root;
-
-  // ターゲットはルート中心（なければ原点）
-  const target = (() => {
-    if (!_fitRoot) return new THREE.Vector3(0,0,0);
-    const b = new THREE.Box3().setFromObject(_fitRoot);
-    return b.getCenter(new THREE.Vector3());
-  })();
-
-  // プリセット
-  const desktopPos = new THREE.Vector3(8, 6, 8);
-  const mobilePos  = new THREE.Vector3(10, 8, 15);
-  const destPos    = isMobile() ? mobilePos : desktopPos;
-
-  // smooth の解釈:
-  //  - false          : 即座に移動
-  //  - number         : その値(ms)の線形Tween
-  //  - {ms, easing, damping, snap} のオプション
-  if (!smooth) {
-    cancelCamTween();
-    camera.position.copy(destPos);
-    controls.target.copy(target);
-    camera.lookAt(target);
-    controls.update();
-    return;
-  }
-
-  // デフォルトは「短めの線形＋ダンピング無効化＋最後スナップ」
-  const opts = (typeof smooth === 'object')
-    ? smooth
-    : { ms: (typeof smooth === 'number' ? smooth : 200), easing: 'linear', damping: false, snap: true };
-
-  tweenCam(destPos, target, opts);
-}
-
-// なめらか移動（調整版）
-function tweenCam(destPos, destTarget, {
-  ms = 200,
-  easing = 'linear',     // 'linear' | 'easeOutQuad' | 'easeInOutQuad'
-  damping = false,       // Tween中にOrbitControlsのダンピングを無効化するか
-  snap = true            // 終了時に最終値を強制セットして「ピタッ」と止める
-} = {}) {
-  cancelCamTween();
-
-  const p0 = camera.position.clone();
-  const t0 = controls.target.clone();
-
-  // イージング関数
-  const eases = {
-    linear: x => x,
-    easeOutQuad: x => 1 - (1 - x) * (1 - x),
-    easeInOutQuad: x => (x < 0.5 ? 2*x*x : 1 - Math.pow(-2*x+2, 2)/2),
-  };
-  const ease = eases[easing] || eases.linear;
-
-  // ダンピングを一時的にOFF
-  const prevDampingEnabled = controls.enableDamping;
-  const prevDampingFactor  = controls.dampingFactor;
-  if (damping === false) {
-    controls.enableDamping = false;
-  }
-
-  const tStart = performance.now();
-  (function step(now){
-    const k = Math.min((now - tStart) / ms, 1);
-    const e = ease(k);
-
-    camera.position.lerpVectors(p0, destPos, e);
-    controls.target.lerpVectors(t0, destTarget, e);
-    controls.update();
-
-    if (k < 1) {
-      _camTweenReq = requestAnimationFrame(step);
-    } else {
-      _camTweenReq = null;
-
-      // 終了時の「ピタッ」補正
-      if (snap) {
-        camera.position.copy(destPos);
-        controls.target.copy(destTarget);
-        camera.lookAt(destTarget);
-        controls.update();
-      }
-      // ダンピング復帰
-      controls.enableDamping = prevDampingEnabled;
-      controls.dampingFactor = prevDampingFactor;
-    }
-  })(performance.now());
-}
-
 
 // ===== GLB ロード =====
 const loader = new GLTFLoader();
@@ -236,11 +100,10 @@ function syncVisUIChecks(){
   });
 }
 
-// 親子関係の親
+// ここをあなたの命名（Blenderのメッシュ名）に合わせて調整
 const GROUP_PARENT = {
   right_wall_optional: 'right_wall',
   unit_bath_wall: 'unit_bath',
-  front_wall_optional: 'front_wall'
 };
 
 const MANUAL_GROUPS = {
@@ -251,79 +114,24 @@ const MANUAL_GROUPS = {
     "wall_r_window_r"
   ],
 
-  front_wall_optional: [
-     "Cube017", "Cube017_1", "Cube017_2"
-  ],
-
-  ceiling: [
-    "skeleton_top", 
-    "wall_top", 
-    "interior_wall_ceiling", 
-    "frame_top", 
-    
-  ],
-
-  front_wall: [
-    "wall_front", 
-    "skeleton_front",
-    "interior_wall_front",
-  ],
-
-  left_wall: [
-    "left_wall", 
-    "skeleton_l", 
-    "wall_l", 
-    "interior_wall_l", 
-    ],
-
-  right_wall: [
-    "right_wall", 
-    "skeleton_r", 
-    "wall_r",
-    "interior_wall_r", 
-    ],
-
-  back_wall: [
-    "skeleton_back", 
-    "wall_back", 
-    "interior_wall_back"
-  ],
-
-  sink: [
-    "Cube078","Cube078_1","Cube078_2","Cube078_3","Cube078_4","Cube078_5","Cube078_6", //"sink"
-  ],
-
-  air_conditioner: [
-    "Cube107", "Cube107_1", "Cube107_2", "Cube107_3", //"ac_unit"
-  ],
-
-  fan: [
-    "Cylinder011","Cylinder011_1", //"fan_blade",
-    "Cylinder013", "Cylinder013_1", //"fan", 
-    "Cylinder016", "Cylinder016_1", //"fan_switch",
-  ],
-
-  unit_bath: [
-    "ub_toilet_seat", 
-    "ub_toilet_cover", 
-    "Cube064","Cube064_1","Cube064_2","Cube064_3", //"unitbath"
-  ],
-
-  unit_bath_wall: [
-    "unitbath_wrap", 
-    "Cube053", "Cube053_1", ///"ub_door"
-  ],
-
-  loft: [
-    "Cube061", "Cube061_1", // "ladder"
-    "Cube058", "Cube058_1" // "loft_floor"
-  ],
+  ceiling:        ["skeleton_top", "wall_top", "interior_wall_ceiling", "frame_top", "ceiling.*"],           // 例: ceiling, ceiling_panel ...
+  front_wall:     ["front_wall", "skeleton_front", /wall.*front/i],
+  left_wall:      ["left_wall", "skeleton_l", "wall_l", "interior_wall_l", "wall_left.*"],
+  right_wall:     ["right_wall", "skeleton_r", "wall_r", /*"wall_r_window_frame", "wall_r_window_r", "wall_r_window_l", */"interior_wall_r", "wall_right.*"],
+  back_wall:      ["skeleton_back", "wall_back", "interior_wall_back"],
+  sink:           ["sink", "kitchen_sink.*", /シンク/],
+  air_conditioner:["air_conditioner", "ac_unit", "aircon.*", /エアコン/],
+  fan:            ["fan", "fan_blade", "fan_switch"],
+  unit_bath:      ["ub_toilet_seat", "ub_toilet_cover", "unitbath"],
+  unit_bath_wall: ["unitbath_wrap", "ub_door"],
+  loft:           ["loft_floor", "ladder"],
 
   // ★新規：初期は非表示にしたい部品群（例）
   optional_hidden: ["bed_frame"], // ワイルドカード可
+
+
 };
 
-// falseで初期状態は非表示
 const GROUP_DEFAULT_VISIBILITY = {
   ceiling: true,
   front_wall: true,
@@ -335,57 +143,11 @@ const GROUP_DEFAULT_VISIBILITY = {
   unit_bath: true,
   unit_bath_wall: true,
   loft: true,
-  optional_hidden: false,          
-  right_wall_optional: true,
-  front_wall_optional: true
+
+  // 例）新規で“初期は非表示”にしたいグループ
+  optional_hidden: false,          // ← 初期は非表示
+  right_wall_optional: true       // ← 右壁のオプション群を初期非表示にしたい場合
 };
-
-// 子をクリックしたら親を選ぶ対象グループキー
-const FORCE_PARENT_ON_CLICK = new Set([
-  'unit_bath_wall', 
-  'right_wall_optional',
-  'front_wall_optional', 
-]);
-
-// 追加：クリック選択を無効化したいグループキー
-const NON_PICKABLE_GROUP_KEYS = new Set([
-
-]); 
-
-// ========== デバッグ出力用 ==========
-// メッシュ配列を {id, name} の配列に整形
-function _asRows(meshes){
-  return meshes.map(m => ({ id: m.id, name: m.name || `(id:${m.id})` }));
-}
-
-// グループ割当の結果を出力
-function logGroupingResult({ assignedByGroup, unassigned }){
-  console.groupCollapsed('%c[Grouping] 割当結果', 'color:#8cf');
-  // 各グループごとの割当一覧
-  assignedByGroup.forEach((arr, key) => {
-    console.groupCollapsed(`%c${key} (${arr.length})`, 'color:#5fa');
-    console.table(_asRows(arr));
-    console.groupEnd();
-  });
-
-  // 未割当
-  if (unassigned.length){
-    console.warn(`[未割当 ${unassigned.length}]`);
-    console.table(_asRows(unassigned));
-  } else {
-    console.log('%c未割当なし', 'color:#5fa');
-  }
-
-  // 空グループ（DOMには出さない運用でも把握したい時用）
-  const empties = [...groupKeyToGroup.keys()].filter(k => {
-    const g = groupKeyToGroup.get(k);
-    return g && g.children.length === 0;
-  });
-  if (empties.length){
-    console.info('[空グループ]', empties);
-  }
-  console.groupEnd();
-}
 
 // 名前マッチ（手動割当て用）
 function selectorMatches(name, selector) {
@@ -449,12 +211,7 @@ addEventListener("resize", () => {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
-  setCameraSimple(); // 直近の _fitRoot を使って再配置
 });
-
-mqMobile.addEventListener?.("change", () => setCameraSimple());
-addEventListener("orientationchange", () => setCameraSimple());
-
 
 // モデルセット
 function setModel(sceneRoot) {
@@ -491,10 +248,7 @@ function setModel(sceneRoot) {
   populateGroupSelect();
   populateGroupVisibilityUI();
 
-  setCameraSimple(sceneRoot, { smooth: false });
-  setCameraSimple(modelGroup, { smooth: false });
-  //setCameraSimple(modelGroup, { smooth: 120 });
-  //setCameraSimple(modelGroup, { smooth: { ms: 180, easing: 'linear', damping: false, snap: true }});
+  fitCameraToObject(sceneRoot, 1.2);
 
   // 初期は未選択にしておく（選んだときだけギズモ表示）
   clearSelection();
@@ -541,7 +295,6 @@ function buildGroupsManual(root) {
 
   // 割当
   const assigned = new Set();
-  const assignedByGroup = new Map();  // 追加: 集計用 groupKey -> Mesh[]
   for (const [key, selectors] of Object.entries(MANUAL_GROUPS)) {
     const g = nameToGroup.get(key);
     for (const mesh of allMeshes) {
@@ -551,16 +304,9 @@ function buildGroupsManual(root) {
         reparentKeepWorld(mesh, g);
         mesh.userData._groupKey = key;
         assigned.add(mesh);
-
-        // ▼ 追加: グループ別リスト
-        if (!assignedByGroup.has(key)) assignedByGroup.set(key, []);
-        assignedByGroup.get(key).push(mesh);
       }
     }
   }
-  // ▼ 追加: 未割当の抽出 & ログ
-  const unassigned = allMeshes.filter(m => !assigned.has(m));
-  logGroupingResult({ assignedByGroup, unassigned });
 
   refreshPickTargets();
   prebindAllPivots();  // ★ 追加：親→子で全ピボットを一度だけ固定
@@ -605,7 +351,6 @@ function groupLabel(key) {
   const jp = {
     ceiling: "天井",
     front_wall: "壁（ドア側）",
-    front_wall_optional: "ドア",
     left_wall: "壁（左）",
     right_wall: "壁（窓側）",
     right_wall_optional: "窓",
@@ -1288,13 +1033,7 @@ const pointer = new THREE.Vector2();
 function refreshPickTargets() {
   pickMeshes = [];
   if (!modelGroup) return;
-  modelGroup.traverse(o => {
-    if (!o.isMesh) return;
-    const key = o.userData?._groupKey;
-    // ここで除外（例：unit_bath_wall はクリック不可）
-    if (key && NON_PICKABLE_GROUP_KEYS.has(key)) return;
-    pickMeshes.push(o);
-  });
+  modelGroup.traverse(o => { if (o.isMesh) pickMeshes.push(o); });
 }
 
 function setPointerFromEvent(ev) {
@@ -1317,66 +1056,34 @@ function findGroupForObject(obj) {
   return null;
 }
 
-function groupKeyFromGroup(g){
-  return (g && typeof g.name === 'string' && g.name.startsWith('grp:'))
-    ? g.name.slice(4) : null;
-}
-
-// オブジェクトにヒットした時に、実際に選ぶべき“昇格済みグループ”を返す
-function resolveClickGroupFromObject(obj){
-  let grp = findGroupForObject(obj);
-  if (!grp) return null;
-
-  let key = groupKeyFromGroup(grp);
-  if (!key) return grp;
-
-  // 子 → 親 へ昇格（最大8段で安全停止）
-  let guard = 0;
-  while (
-    (FORCE_PARENT_ON_CLICK.has(key) || NON_PICKABLE_GROUP_KEYS.has(key)) &&
-    parentKeyOf(key) &&
-    guard++ < 8
-  ){
-    key = parentKeyOf(key);
-  }
-  return groupKeyToGroup.get(key) || grp;
-}
-
 function onCanvasPointerDown(ev) {
   if (tctrl.dragging || ev.button !== 0) return;
 
   setPointerFromEvent(ev);
   raycaster.setFromCamera(pointer, camera);
+
   const hits = raycaster.intersectObjects(pickMeshes, true);
 
-  for (const h of hits){
-    // 近い順に、可視で“選べる”グループを決定
-    const g = resolveClickGroupFromObject(h.object);
-    if (!g) continue;
-    if (!isWorldVisible(g)) continue;
+  // 可視なものだけを選択候補に
+  const hit = hits.find(h => isWorldVisible(h.object));
+  if (!hit) { clearSelection(); $groupSelect.value = ""; return; }
 
-    // 同じグループならトグル解除
-    if (selected === g){
-      clearSelection();
-      $groupSelect.value = "";
-      updateVisUICardSelection?.(null);
-      return;
-    }
+  const grp = findGroupForObject(hit.object);
 
-    // 選択
-    selectGroup(g);
-    const key = groupKeyFromGroup(g) || "";
-    $groupSelect.value = key;                 // セレクト同期
-    updateVisUICardSelection?.(key);          // カード側のハイライト同期（あれば）
-    return;
+  // グループ自体が非表示なら選択解除
+  if (!grp || !isWorldVisible(grp)) {
+    clearSelection(); $groupSelect.value = ""; return;
   }
 
-  // ヒットなし → 解除
-  clearSelection();
-  $groupSelect.value = "";
-  updateVisUICardSelection?.(null);
-}
+  if (selected === grp) { // 同じグループを再クリック → 解除
+    clearSelection(); $groupSelect.value = ""; return;
+  }
 
+  selectGroup(grp);
+  const key = grp.name.replace(/^grp:/, "");
+  $groupSelect.value = key;                 // プルダウン表示を同期
+  updateVisUICardSelection(key);  
+}
 
 // ★ 登録（初期化のどこかで一度だけ）
 renderer.domElement.addEventListener("pointerdown", onCanvasPointerDown);
@@ -1432,6 +1139,7 @@ function applyToMeshTree(root, fn) {
 }
 
 (function responsiveSelect(){
+  const BREAKPOINT = 768; // px
   const sel = document.getElementById('group-select');
   if (!sel) return;
 
@@ -1462,31 +1170,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // 起動時オートロード（HTTP配信で開いてください）
-//loader.load("./sh-apply-color.glb", (gltf) => setModel(gltf.scene));
-
-function dumpGLTFNames(gltf) {
-  const { parser } = gltf;
-  console.groupCollapsed('[Debug] GLTF names map');
-  gltf.scene.traverse(o => {
-    if (!o.isMesh) return;
-    const assoc = parser.associations.get(o) || {};
-    const nodeIndex = assoc.node ?? assoc.nodes?.[0];
-    const meshIndex = assoc.mesh;
-    const primIndex = assoc.primitive;
-    const nodeDef = (nodeIndex != null) ? parser.json.nodes[nodeIndex] : null; // Blenderのオブジェクト名
-    const meshDef = (meshIndex != null) ? parser.json.meshes[meshIndex] : null; // メッシュデータ名
-    console.log({
-      threeName: o.name,                     // Three.js上で見える名前（= glTF node.name が多い）
-      blenderObject: nodeDef?.name ?? null,  // Blenderのオブジェクト名
-      blenderMeshData: meshDef?.name ?? null,// Blenderのメッシュデータ名
-      primitive: primIndex                   // マルチマテリアル分割の何番目か
-    });
-  });
-  console.groupEnd();
-}
-
-// 読み込み時に呼ぶ
-loader.load('./sh-apply-color.glb', (gltf) => {
-  dumpGLTFNames(gltf);
-  setModel(gltf.scene);
-});
+loader.load("./sh-apply.glb", (gltf) => setModel(gltf.scene));

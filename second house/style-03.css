@@ -203,66 +203,35 @@ body {
 
 .row-label.tex-input-title,
 #tex-input,
-#clear-tex,
-#show-all-groups {
+#clear-tex {
   display: none;
 }
 
-#header-note {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  display: block;
-  font-size: 11px;
-  color: #555555;
-  line-height: 1.6em;
-  z-index: 10;
-}
-
 /* ===== モバイル時（アコーディオン化） ===== */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   /* UI幅を画面の30%に */
   #ui {
     position: fixed;
-    left: 50%;
+    left: 8px;
+    right: 8px;
     bottom: 0;
-    top: auto; 
-    right: auto; 
-    height: 23vh; 
-    transform: translateX(-50%);
-    width: min(980px, calc(100% - 16px));
-    box-sizing: border-box;
-    min-height: 0;              /* ← ここがポイント */
+    top: auto;                  /* 既存の top 指定を無効化 */
+    width: 90%;               /* 30%ではなく全幅に */
+    height: 30vh;               /* ← ここがポイント */
     max-height: 40vh;
     border-radius: 12px 12px 0 0;
     z-index: 50;
-    overflow-y: auto;  /* 中身が多い時スクロール */
-    overflow-x: hidden;         
+    overflow-y: auto;           /* 中身が多い時スクロール */
     -webkit-overflow-scrolling: touch;
     padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     background: rgba(20,20,20,.9);
     backdrop-filter: blur(4px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px;     /* タイル間の余白 */
+    gap: 8px;     /* タイル間の余白 */
   }
 
-  #ui .row {
-  margin: 0;
-}
-
-  #group-select[size]{
-    width: 100%;
-    max-height: min(40vh, 320px); /* お好みで */
-    box-sizing: border-box;
-  }
-
-  option {
-    margin-top: 2px;
-    padding: 4px;
-  }
-
-  #group-vis-list{
+    #group-vis-list{
     --vis-cols: 2; /* 既定：2列 */
     display: grid;
     grid-template-columns: repeat(var(--vis-cols), minmax(0, 1fr));
@@ -270,13 +239,7 @@ body {
     align-items: start;
   }
 
-  h2.row.full {
-    margin: 20px;
-  }
-
-  #ui .row { 
-    grid-column: span 1; 
-  } 
+  #ui .row { grid-column: span 1; } 
 
    #ui .row.full { 
     grid-column: 1 / -1; 
@@ -287,11 +250,7 @@ body {
     display: flex;            /* ← inline-flex を使っている場合も OK */
     flex-direction: column;   /* ← これで .row-body が必ず下へ */
     align-items: stretch;
-    height: auto;
-    grid-column: span 1;
-    min-width: 0;  /* はみ出し防止 */
-    width: 100%;         /* ← auto ではなく 100% に */
-    box-sizing: border-box;
+    width: auto; 
   }
 
   #ui .row.collapsible.full { 
@@ -300,13 +259,11 @@ body {
 
   #ui .row:not(.collapsible){
     grid-column: 1 / -1;
-    padding: 0 0 8px 0;
   }
 
   #ui .row.collapsible .row-label {
     display: flex;
     width: 100%;
-    box-sizing: border-box;
     align-items: center;
     justify-content: space-between;
     min-width: 0;
@@ -323,14 +280,12 @@ body {
     color: #999;
     font-weight: 700;
     transition: transform .15s ease;
-    margin-left: auto;   /* ← フレックスで右端へ */
-    flex: 0 0 auto;      /* ← 自分の幅以上に広がらない */
   }
 
   /* 中身はデフォルト非表示、チェックで表示 */
   #ui .row.collapsible .row-body {
     display: none;
-    padding: 0 2px 0 2px;
+    padding: 8px 2px 0 2px;
     width: 100%;
     box-sizing: border-box;
   }
@@ -344,29 +299,6 @@ body {
   /* 中身にある .stack も幅いっぱいに */
   #ui .row.collapsible .row-body .stack {
     width: 100%;
-  }
-
-  /* 開いたら UI 全幅に拡張（2列グリッドなら 1 / -1） */
-  #ui .row.collapsible:has(.row-toggle:checked){
-    grid-column: unset;
-  }
-
-  /* 中身はフル幅を使えるように */
-  #ui .row.collapsible .row-body{
-    display: none;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  #ui .row.collapsible .row-toggle:checked ~ .row-body{
-    display: block;
-  }
-
-  div#tex-row.row.collapsible {
-    display: none;
-  }
-
-  div#footer-note.row.full {
-    display: none;
   }
 
 }
