@@ -145,11 +145,12 @@ function doMove(f, t) {
     ps.forEach(pc => {
       const s = document.createElement('span');
       s.textContent = SYM[pc];
-      addTap(s, () => commitMove(f, t, pc));
+      s.addEventListener('click', () => commitMove(f, t, pc));
       row.appendChild(s);
     });
     document.getElementById('promo').style.display = 'block';
-    sel = null; hints = [];
+    sel = null;
+    hints = [];
     render();
     return;
   }
@@ -163,19 +164,24 @@ function commitMove(f, t, promo) {
   board = applyBoard(board, f, t, promo);
   lastMove = { f, t };
   turn = opp(turn);
-  sel = null; hints = [];
+  sel = null;
+  hints = [];
 
   const mv = legalAll(board, turn);
   const ck = inCheck(board, turn);
 
   if (mv.length === 0) {
     over = true;
-    updateCards(); render();
-    showMsg(ck ? (opp(turn) === 'w' ? '白' : '黒') + 'の勝ち！チェックメイト' : '引き分け（ステイルメイト）');
+    updateCards();
+    render();
+    showMsg(ck
+      ? (opp(turn) === 'w' ? '白' : '黒') + 'の勝ち！チェックメイト'
+      : '引き分け（ステイルメイト）');
     return;
   }
   showMsg(ck ? (turn === 'w' ? '白にチェック！' : '黒にチェック！') : '');
-  updateCards(); render();
+  updateCards();
+  render();
   if (aiMode && turn === 'b' && !over) setTimeout(aiMove, 350);
 }
 
@@ -186,7 +192,8 @@ function aiMove() {
   if (!mv.length) return;
   let best = null, bs = -Infinity;
   mv.forEach(([f, t]) => {
-    const s = applyBoard(board, f, t, null).reduce((a, p) => p ? a + (VAL[p] || 0) : a, 0) * -1;
+    const s = applyBoard(board, f, t, null)
+      .reduce((a, p) => p ? a + (VAL[p] || 0) : a, 0) * -1;
     if (s > bs) { bs = s; best = [f, t]; }
   });
   if (best) commitMove(best[0], best[1], null);
@@ -195,56 +202,65 @@ function aiMove() {
 // ── タップ処理 ───────────────────────────────────────
 function tap(i) {
   if (over || pendingPromo) return;
-  if (sel !== null && hints.includes(i)) { doMove(sel, i); return; }
+
+  // 移動先として選択されたとき
+  if (sel !== null && hints.includes(i)) {
+    doMove(sel, i);
+    return;
+  }
+
+  // 自分の駒をクリック → 選択
   const p = board[i];
   if (p && col(p) === turn && !(aiMode && turn === 'b')) {
-    sel = i; hints = legalFrom(i); render(); return;
+    sel = i;
+    hints = legalFrom(i);
+    render();
+    return;
   }
-  sel = null; hints = []; render();
+
+  // それ以外 → 選択解除
+  sel = null;
+  hints = [];
+  render();
 }
 
-// タッチ・クリック両対応のイベント登録
-function addTap(el, fn) {
-  let touched = false;
-  el.addEventListener('touchstart', e => { e.stopPropagation(); touched = true; }, { passive: true });
-  el.addEventListener('touchend',   e => { e.stopPropagation(); if (touched) { touched = false; fn(); } }, { passive: true });
-  el.addEventListener('click',      e => { e.stopPropagation(); if (!touched) fn(); touched = false; });
-}
-
-// ── 描画 ─────────────────────────────────────────────
+// ── 描画（毎回全セル再構築） ─────────────────────────
 function render() {
   const bd = document.getElementById('board');
   const ki = kingIdx(board, turn);
   const ck = !over && inCheck(board, turn);
-  const cells = bd.querySelectorAll('.sq');
 
-  const updateCell = (d, i) => {
+  bd.innerHTML = '';
+
+  for (let i = 0; i < 64; i++) {
     const r = Math.floor(i / 8), c = i % 8;
+    const d = document.createElement('div');
+
     d.className = 'sq ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
-    if (sel === i) d.classList.add('sel');
-    if (hints.includes(i)) { d.classList.add('hint'); if (board[i]) d.classList.add('occ'); }
+
+    if (sel === i)          d.classList.add('sel');
+    if (hints.includes(i))  {
+      d.classList.add('hint');
+      if (board[i]) d.classList.add('occ');
+    }
     if (lastMove && lastMove.f === i) d.classList.add('lf');
     if (lastMove && lastMove.t === i) d.classList.add('lt');
-    if (ck && i === ki) d.classList.add('ck');
+    if (ck && i === ki)     d.classList.add('ck');
+
     const p = board[i];
-    let sp = d.querySelector('.piece');
     if (p) {
-      if (!sp) { sp = document.createElement('span'); d.appendChild(sp); }
+      const sp = document.createElement('span');
       sp.className = 'piece ' + (isW(p) ? 'wp' : 'bp');
       sp.textContent = SYM[p];
-    } else if (sp) { sp.remove(); }
-  };
-
-  if (cells.length === 64) {
-    cells.forEach((d, i) => updateCell(d, i));
-  } else {
-    bd.innerHTML = '';
-    for (let i = 0; i < 64; i++) {
-      const d = document.createElement('div');
-      updateCell(d, i);
-      addTap(d, () => tap(i));
-      bd.appendChild(d);
+      d.appendChild(sp);
     }
+
+    // クロージャで i を確実に捕捉
+    d.addEventListener('click', (function(idx) {
+      return function() { tap(idx); };
+    })(i));
+
+    bd.appendChild(d);
   }
 }
 
@@ -253,28 +269,36 @@ function updateCards() {
   document.getElementById('cw').className = 'pcard' + (turn === 'w' && !over ? ' on' : '');
   document.getElementById('cb').className = 'pcard' + (turn === 'b' && !over ? ' on' : '');
 }
-function showMsg(m) { document.getElementById('msg').textContent = m; }
+
+function showMsg(m) {
+  document.getElementById('msg').textContent = m;
+}
 
 // ── ボタン・モード ────────────────────────────────────
 aiMode = true;
 
-addTap(document.getElementById('mode-btn'), () => {
+document.getElementById('mode-btn').addEventListener('click', () => {
   aiMode = !aiMode;
   document.getElementById('mode-btn').textContent = aiMode ? 'AI対戦中' : '2人対戦中';
   document.getElementById('nb').textContent = aiMode ? 'AI' : 'プレイヤー2';
   init();
 });
 
-addTap(document.getElementById('btn-new'), init);
+document.getElementById('btn-new').addEventListener('click', init);
 
-addTap(document.getElementById('btn-undo'), () => {
+document.getElementById('btn-undo').addEventListener('click', () => {
   if (!hist.length || pendingPromo) return;
   const steps = aiMode && hist.length >= 2 ? 2 : 1;
   const h = hist.splice(-steps);
   ({ board, turn, lastMove } = h[0]);
-  over = false; sel = null; hints = []; pendingPromo = null;
+  over = false;
+  sel = null;
+  hints = [];
+  pendingPromo = null;
   document.getElementById('promo').style.display = 'none';
-  updateCards(); render(); showMsg('');
+  updateCards();
+  render();
+  showMsg('');
 });
 
 // ── 起動 ─────────────────────────────────────────────
