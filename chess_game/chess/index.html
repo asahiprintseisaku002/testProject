@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>チェスゲーム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- トップバー -->
+    <div id="top">
+      <div id="status-txt">チェスゲーム</div>
+      <button id="mode-btn">AI対戦中</button>
+    </div>
+
+    <!-- 盤面 -->
+    <div id="board-outer">
+      <div id="board"></div>
+    </div>
+
+    <!-- ファイル座標 (a〜h) -->
+    <div id="files">
+      <span>a</span><span>b</span><span>c</span>
+      <span>d</span><span>e</span><span>f</span>
+      <span>g</span><span>h</span>
+    </div>
+
+    <!-- プレイヤーカード -->
+    <div id="cards">
+      <div class="pcard" id="cw">
+        <div class="plabel">白</div>
+        <div class="pname" id="nw">あなた</div>
+      </div>
+      <div class="pcard" id="cb">
+        <div class="plabel">黒</div>
+        <div class="pname" id="nb">AI</div>
+      </div>
+    </div>
+
+    <!-- ボタン -->
+    <div id="btns">
+      <button id="btn-new">新しいゲーム</button>
+      <button id="btn-undo">一手戻す</button>
+    </div>
+
+    <!-- メッセージ -->
+    <div id="msg"></div>
+
+    <!-- プロモーション選択（ポーンが端に到達したとき表示） -->
+    <div id="promo">
+      <p>プロモーション：駒を選択してください</p>
+      <div id="promo-row"></div>
+    </div>
+
+  </div>
+
+  <script src="chess.js"></script>
+</body>
+</html>
